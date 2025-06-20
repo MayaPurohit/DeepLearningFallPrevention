@@ -54,11 +54,11 @@ class MotionDataset(Dataset):
             for j in range(len(ActivityList)):
                 data_pack = {}
                 df = df = pd.read_csv(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
-                df = df[3:].astype('float64')
+                df = df[1:].astype('float64')
             
-                df['Composed_Acceleration'] = np.sqrt(np.power(df['Shimmer_8665_Accel_LN_X_CAL'], 2) + np.power(df['Shimmer_8665_Accel_LN_Y_CAL'], 2) + np.power(df['Shimmer_8665_Accel_LN_Y_CAL'], 2))
+                df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], prominence = 20)
+                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = 128, prominence = 12 )
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
@@ -83,8 +83,6 @@ class MotionDataset(Dataset):
     
 
     def __getitem__(self, idx):
-  
-
         if self.mode == "train":
             val = self.train_data[idx]
         elif self.mode == "val":
