@@ -1,30 +1,41 @@
 # Maya Purohit
-#4/19/2025
 # Train.py
-# Train the SRCNN Model
+# Used to train our models 
 
 import os
 import time
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision.utils import save_image
+
+sys.path.append(os.path.abspath("CNN_Models\\AlexNet"))
+sys.path.append(os.path.abspath("CNN_Models\\Initial Model"))
+sys.path.append(os.path.abspath("CNN_Models\\VGGNet"))
+sys.path.append(os.path.abspath("CNN_Models\\Personal_Model"))
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import random
 import wandb
+import time
+import psutil
 
 from dataloader import MotionDataset
-from Existing_CNN import TestCNN
+from AlexNet import AlexNetCNN
+from VGGNet import VGGNetCNN
+from Test_CNN import TestCNN
+from PersModel import PersModelCNN
 
 
 # Metrics
 
 
+
+
 #10%
-def train(config):
+def train(config, test_type, model_name):
     """
     Train the SuperResolution model
     
@@ -37,10 +48,29 @@ def train(config):
 
     wandb.init(project="Fall_Detection_Project", name="cnn-run")
 
-    model = TestCNN(input_channels= config['input_channels'],
-        num_blocks=config['num_blocks'],
-        num_features=config['num_features'],
+
+
+
+    if model_name == "initial":
+        
+        model = TestCNN(input_channels= config['input_channels'],
+            num_blocks=config['num_blocks'],
+            num_features=config['num_features'],
         )
+    elif model_name == "alex":
+        model = AlexNetCNN(input_channels= config['input_channels']
+        )
+
+    elif model_name == "vgg":
+        model = VGGNetCNN(input_channels= config['input_channels']
+    )
+    elif model_name == "personal":
+        model = PersModelCNN(input_channels= config['input_channels'],
+            num_features=config['num_features']
+        )
+
+
+
     optimizer = optim.Adam(
         model.parameters(),
         lr=config['learning_rate'],
@@ -54,17 +84,26 @@ def train(config):
         gamma=config['lr_decay_gamma']
     )
     
+    # Make all necessary directories
    
-    os.makedirs(config['checkpoint_dir'], exist_ok=True)
-    os.makedirs(config['best_dir'], exist_ok=True)
-    
+    os.makedirs(config['save_dir'], exist_ok=True)
+    os.makedirs(os.path.join(config['save_dir'], config['checkpoint_dir']), exist_ok=True)
+    os.makedirs(os.path.join(config['save_dir'], config['best_dir']), exist_ok=True)
 
+
+
+    #Define datasets, dataloaders, and loss function 
     loss_fn = nn.CrossEntropyLoss()
-    train_dataset = MotionDataset(config["root_dir"], config["window_size"], mode ="train")
-    val_dataset = MotionDataset(config["root_dir"], config["window_size"], mode ="val")
+
+
+    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="train", test_type = test_type)
+    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'], mode ="val", test_type = test_type)
+
     train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset,
                                               batch_size=config["batch_size"],
                                               shuffle=True)
+    num_samples = len(train_dataloader.dataset)
+
     val_dataloader = torch.utils.data.DataLoader(dataset=val_dataset,
                                               batch_size=config["batch_size"],
                                               shuffle=True)
@@ -72,6 +111,8 @@ def train(config):
     train_losses = []
     best_accuracy = 0
 
+    latency_vals = []
+    throughput_vals = []
     
     
     wandb.config = {
@@ -81,6 +122,8 @@ def train(config):
     "loss_function": "Cross Entropy Loss",
     }
 
+    process = psutil.Process()
+    cpu_start = process.cpu_percent()
 
     for epoch in range(0, config['num_epochs']):
         model.train()
@@ -88,8 +131,10 @@ def train(config):
         
        
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config['num_epochs']}")
+        #For each batch
         for batch in train_pbar:
-           
+            
+          
             data_sample = batch['data_sample'].to(device)
             class_label = batch['class_label'].to(device)
             
@@ -98,9 +143,17 @@ def train(config):
             
             
             data_sample = data_sample.permute(0, 2, 1) 
+            start = time.time()
             output = model(data_sample)
             
-            
+            end = time.time()
+           
+            latency = (end - start)/config['batch_size']
+            throughput = config['batch_size']/((end - start) + (1e-5))
+            latency_vals.append(latency)
+            throughput_vals.append(throughput)
+    
+
             loss =  loss_fn(output, class_label)
             
             
@@ -122,7 +175,7 @@ def train(config):
 
         wandb.log({"train_loss": train_loss, "epoch": epoch + 1})
         
-       
+       #check if the model should be validated 
         should_validate = (
             config['validation_interval'] > 0 and 
             (epoch + 1) % config['validation_interval'] == 0
@@ -138,7 +191,7 @@ def train(config):
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'accuracy': accuracy,
-                }, os.path.join(config['best_dir'], 'best_model.pth'))
+                }, os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
 
                 print(f"Saved best model with accuracy: {accuracy:.2f}")
           
@@ -147,9 +200,49 @@ def train(config):
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-            }, os.path.join(config['checkpoint_dir'], f'checkpoint_epoch_{epoch+1}.pth'))
+            }, os.path.join(config['save_dir'], config['checkpoint_dir'], f'checkpoint_epoch_{epoch+1}.pth'))
     
+    cpu_end = process.cpu_percent()
     wandb.finish()
+
+
+    
+    # Calculate the CPU Usage, Throughput, and  Latency 
+
+    cpu_usage = cpu_end - cpu_start
+
+
+    print("CPU Usage: ", cpu_usage)
+
+    sum_lat = 0
+    sum_thr = 0
+    plot_latency = []
+    plot_through = []
+    for i in range(len(latency_vals)):
+        sum_lat +=latency_vals[i]
+        sum_thr += throughput_vals[i]
+        if i % int(num_samples/config['batch_size']) == 0:
+            lat_avg = sum_lat/(num_samples/config['batch_size'])
+            thr_avg = sum_thr/(num_samples/config['batch_size'])
+            plot_latency.append(lat_avg)
+            plot_through.append(thr_avg)
+            sum_lat = 0
+            sum_thr = 0
+
+   
+    #plot the values 
+
+    fig, ax = plt.subplots(2,1, sharex='col')
+    ax[0].plot(range(len(plot_latency)), plot_latency)
+    ax[1].plot(range(len(plot_through)), plot_through)
+
+    ax[0].set_ylabel("Latency (s/sample)")
+    ax[1].set_ylabel("Throughput (# samples/s)")
+
+    fig.suptitle(f"Latency and Throughout (CPU Usage: {cpu_usage})")
+    fig.supxlabel('Number of Epoch')
+    plt.savefig(os.path.join(config['save_dir'], 'Latency and Throughput'))
+ 
 
 def evaluate(data_loader, model, num_epoch):
     """
@@ -185,13 +278,14 @@ def evaluate(data_loader, model, num_epoch):
             labels = data_samples["class_label"]
             data = data.permute(0, 2, 1) 
             
+            #Check to see how many samples were classified correctly 
             output_labels = model(data)
             _, outputs = torch.max(output_labels, dim = 1)
 
             total += labels.size(0)
             correct += (outputs == labels).sum().item()
     
-    # Calculate accuracy
+    #Calculate accuracy
     accuracy = 100 * correct / total
     print(f'Accuracy on the {total} validation images: {accuracy:.2f}%')
     
@@ -202,7 +296,7 @@ def evaluate(data_loader, model, num_epoch):
     return accuracy
 
 
-def test(model = None):
+def test(test_type, model_name, model = None):
     """
     Evaluate the Siamese network
     
@@ -216,10 +310,21 @@ def test(model = None):
     # Set Model
 
     if model is None:
-        model = TestCNN(input_channels=config['input_channels'],
-        num_blocks=config['num_blocks'],
-        num_features=config['num_features'])
-        checkpoint = torch.load(os.path.join(config['best_dir'], 'best_model.pth'))
+        if model_name == "initial":
+            model = TestCNN(input_channels= config['input_channels'],
+                num_blocks=config['num_blocks'],
+                num_features=config['num_features'],
+            )
+        elif model_name == "alex":
+            model = AlexNetCNN(input_channels= config['input_channels'])
+        elif model_name == "vgg":
+            model = VGGNetCNN(input_channels= config['input_channels'])
+        elif model_name == "personal":
+            model = PersModelCNN(input_channels= config['input_channels'],
+            num_features=config['num_features'])
+
+
+        checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
 
 
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -231,8 +336,10 @@ def test(model = None):
     correct = 0.0
     total = 0.0
 
-    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], mode ="test")
+    #Make dataset and dataloader 
 
+    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="test", test_type = test_type)
+   
     test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=config["batch_size"],
                                               shuffle=True)
@@ -267,29 +374,45 @@ def test(model = None):
             total += labels.size(0)
             correct += (outputs == labels).sum().item()
     
-    # Calculate accuracy
+    # calculate accuracy
     accuracy = 100 * correct / total
 
-    classes = range(5)
+   
     precision_list = []
     recall_list = []
-
+    accuracy_list = []
     # find precision and recall statistics
     for i in range(5):
         precision = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 0])) * 100
         recall = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 1])) * 100
+        accuracy = ((precision_recall[i, 3] +precision_recall[i,2]) / (precision_recall[i, 0]+ precision_recall[i, 2] + precision_recall[i, 3] + precision_recall[i, 1])) * 100
         precision_list.append(precision)
         recall_list.append(recall)
+        accuracy_list.append(accuracy)
         print(f'Precision on Class {i} validation images: {precision:.2f}%')
         print(f'Recall on Class {i} validation images: {recall:.2f}%')
+        print(f'Accuracy on Class {i} validation images: {accuracy:.2f}%')
 
+    locations = ['Tiled Hallway', 'Carpet', 'Concrete', 'Brick', 'Lawn']
 
-    plt.plot(classes, precision_list)
-    plt.plot(classes, recall_list)
+    plt.plot(locations, precision_list, label = "Precision")
+    plt.plot(locations, recall_list, label = "Recall")
+    plt.plot(locations, accuracy_list, label = "Accuracy")
     plt.xlabel("Class Label")
     plt.ylabel("Percentage")
-    plt.title("Precision and Recall Curve for Each Class")
-    plt.savefig("Precision and Recall Curve for Each Class")
+    for i, txt in enumerate(precision_list):
+        plt.text(locations[i], precision_list[i], f'{txt:.2f}%')
+
+    for i, txt in enumerate(recall_list):
+        plt.text(locations[i], recall_list[i], f'{txt:.2f}%')
+
+    for i, txt in enumerate(accuracy_list):
+        plt.text(locations[i], accuracy_list[i], f'{txt:.2f}%')
+    
+    plt.legend()
+    plt.title("Accuracy, Precision and Recall Curve for Each Class")
+    plt.savefig(os.path.join(config['save_dir'], "Accuracy_Precision_Recall"))
+
 
     print(f'Accuracy on the {total} validation images: {accuracy:.2f}%')
     
@@ -303,26 +426,30 @@ def test(model = None):
 if __name__ == "__main__":
     # Configuration
     config = {
-        # Model parameters
-        'num_features': 32,             # Number of feature channels
-        'num_blocks': 10,               # Number of residual blocks
+
         
 
         'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'window_size' : 128,
+        'save_dir': fr'CNN_Models\\VGGNet',  # Directory specific to the model being tested 
+        
         
         # Training parameters
-        'batch_size': 10,                # Batch size
-        'num_epochs': 50,               # Total number of epochs
-        'learning_rate': 1e-5,           # Initial learning rate
-        'lr_decay_step': 30,             # Epoch interval to decay LR
-        'lr_decay_gamma': 0.5,           # Multiplicative factor of learning rate decay
-        'validation_interval': 5,        # Epoch interval to perform validation (set to 5 for faster training)
+        'batch_size': 15,                
+        'num_epochs': 15,               
+        'learning_rate': 1e-6,           
+        'lr_decay_step': 30,            
+        'lr_decay_gamma': 0.5,           
+        'validation_interval': 5,        
         'input_channels'   : 6,
+        'test_ratio' : 0.2,
+        'window_size' : 64,
+        'num_features': 64,             
+        'num_blocks': 8,      
+        'test_type' : "user",         
         
 
-        'checkpoint_dir': 'checkpoints', # Directory to save checkpoints
-        'run_type' : 'train',
+        'checkpoint_dir': 'checkpoints', 
+        'run_type' : 'test',
         'best_dir': 'best_model',         # Directory to save sample images
         'save_every': 5,                 # Save checkpoint every N epochs
         'resume': None,                  # Path to checkpoint to resume from
@@ -330,6 +457,6 @@ if __name__ == "__main__":
     
 
     if config['run_type'] == 'test':
-        test()
+        test(config['test_type'], "vgg")
     else:
-        train(config)
+        train(config, config['test_type'], "vgg")
