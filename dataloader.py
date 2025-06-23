@@ -111,7 +111,7 @@ class MotionDataset(Dataset):
         
             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
             # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-            peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = self.window_size, prominence = 12 )
+            peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
 
             for idx in peaks:
                 if (idx - ((self.window_size//2)-1)) > 0:
@@ -137,7 +137,7 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = self.window_size, prominence = 12 )
+                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:

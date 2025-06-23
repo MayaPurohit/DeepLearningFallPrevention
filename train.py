@@ -96,8 +96,8 @@ def train(config, test_type, model_name):
     loss_fn = nn.CrossEntropyLoss()
 
 
-    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="train", test_type = test_type)
-    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'], mode ="val", test_type = test_type)
+    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="train", threshold= config['threshold'], test_type = test_type)
+    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'], mode ="val", threshold= config['threshold'], test_type = test_type)
 
     train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset,
                                               batch_size=config["batch_size"],
@@ -337,7 +337,7 @@ def test(test_type, model_name, model = None):
 
     #Make dataset and dataloader 
 
-    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="test", test_type = test_type)
+    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="test", threshold= config['threshold'], test_type = test_type)
    
     test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=config["batch_size"],
@@ -447,7 +447,8 @@ if __name__ == "__main__":
         'window_size' : 128,
         'num_features': 64,             
         'num_blocks': 8,      
-        'test_type' : "user",         
+        'test_type' : "user",   
+        'threshold' : 2,     
         
 
         'checkpoint_dir': 'checkpoints', 
