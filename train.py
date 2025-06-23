@@ -34,7 +34,7 @@ from PersModel import PersModelCNN
 
 
 
-#10%
+
 def train(config, test_type, model_name):
     """
     Train the SuperResolution model
@@ -313,8 +313,7 @@ def test(test_type, model_name, model = None):
         if model_name == "initial":
             model = TestCNN(input_channels= config['input_channels'],
                 num_blocks=config['num_blocks'],
-                num_features=config['num_features'],
-            )
+                num_features=config['num_features'])
         elif model_name == "alex":
             model = AlexNetCNN(input_channels= config['input_channels'])
         elif model_name == "vgg":
@@ -383,7 +382,10 @@ def test(test_type, model_name, model = None):
     accuracy_list = []
     # find precision and recall statistics
     for i in range(5):
-        precision = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 0])) * 100
+        if (precision_recall[i, 3] + precision_recall[i, 0]) == 0:
+            precision = 0.0
+        else:
+            precision = precision = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 0])) * 100
         recall = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 1])) * 100
         accuracy = ((precision_recall[i, 3] +precision_recall[i,2]) / (precision_recall[i, 0]+ precision_recall[i, 2] + precision_recall[i, 3] + precision_recall[i, 1])) * 100
         precision_list.append(precision)
@@ -430,19 +432,19 @@ if __name__ == "__main__":
         
 
         'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'save_dir': fr'CNN_Models\\VGGNet',  # Directory specific to the model being tested 
+        'save_dir': fr'CNN_Models\\Personal_Model',  # Directory specific to the model being tested 
         
         
         # Training parameters
         'batch_size': 15,                
-        'num_epochs': 15,               
-        'learning_rate': 1e-6,           
+        'num_epochs': 150,               
+        'learning_rate': 5e-6,           
         'lr_decay_step': 30,            
         'lr_decay_gamma': 0.5,           
         'validation_interval': 5,        
         'input_channels'   : 6,
         'test_ratio' : 0.2,
-        'window_size' : 64,
+        'window_size' : 128,
         'num_features': 64,             
         'num_blocks': 8,      
         'test_type' : "user",         
@@ -457,6 +459,6 @@ if __name__ == "__main__":
     
 
     if config['run_type'] == 'test':
-        test(config['test_type'], "vgg")
+        test(config['test_type'], "personal")
     else:
-        train(config, config['test_type'], "vgg")
+        train(config, config['test_type'], "personal")

@@ -2,8 +2,9 @@ from scipy.signal import find_peaks
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from findpeaks import findpeaks
 
-df = pd.read_csv('~\\DeepLearningFallDetection\\data\\User2_LocationA_Normal.csv', sep = "\t", header = 1)
+df = pd.read_csv('~\\DeepLearningFallDetection\\data\\User1_LocationA_Normal.csv', sep = "\t", header = 1)
 
 
 df = df.iloc[1:].astype('float64')
@@ -12,7 +13,18 @@ df = df.iloc[1:].astype('float64')
 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
 
 
-peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = 128, prominence = 12 )
+peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 1, distance = 128, prominence = 12 )
+
+# fp = findpeaks(method='peakdetect', lookahead=128, interpolate=None)
+
+# results = fp.fit(df['Composed_Acceleration'])
+
+# peaks_df = results['df']
+
+# peaks_only = peaks_df[peaks_df['peak'] == 1]
+
+# print(results)
+# fp.plot()
 
 
 peak_values = df['Composed_Acceleration'].iloc[peaks]
@@ -24,7 +36,8 @@ plt.plot(df['Shimmer_8665_Timestamp_Unix_CAL'].iloc[peaks[0] - 67], df['Composed
 plt.plot(df['Shimmer_8665_Timestamp_Unix_CAL'].iloc[peaks[0] + 67], df['Composed_Acceleration'].iloc[peaks[0] + 68], "bo")
 plt.plot(df['Shimmer_8665_Timestamp_Unix_CAL'].iloc[peaks[1] - 67], df['Composed_Acceleration'].iloc[peaks[1] - 67], "go")
 plt.plot(df['Shimmer_8665_Timestamp_Unix_CAL'].iloc[peaks[1] + 68], df['Composed_Acceleration'].iloc[peaks[1] + 68], "go")
-
+plt.plot(df['Shimmer_8665_Timestamp_Unix_CAL'].iloc[peaks[2] - 67], df['Composed_Acceleration'].iloc[peaks[2] - 67], "ko")
+plt.plot(df['Shimmer_8665_Timestamp_Unix_CAL'].iloc[peaks[2] + 68], df['Composed_Acceleration'].iloc[peaks[2] + 68], "ko")
 # for idx in peaks:
 #         data_sample = df.iloc[idx - ((128//2)-1): idx + (128//2), 0:7]
 #         print(data_sample)

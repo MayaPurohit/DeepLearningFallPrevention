@@ -17,13 +17,14 @@ from scipy.signal import find_peaks
 
 
 class MotionDataset(Dataset):
-    def __init__(self, root_dir, window_size, mode = "train", test_ratio=0.2,seed=42, test_type = "normal"):
+    def __init__(self, root_dir, window_size, mode = "train", threshold = 3, test_ratio=0.2,seed=42, test_type = "normal"):
 
         self.root_dir = root_dir
         self.test_ratio = test_ratio
         self.seed = seed
         self.window_size = window_size
         self.mode = mode
+        self.threshold = threshold
         
 
         random.seed(seed)
@@ -91,7 +92,7 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = self.window_size, prominence = 12 )
+                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
