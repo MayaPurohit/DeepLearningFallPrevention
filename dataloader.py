@@ -17,36 +17,114 @@ from scipy.signal import find_peaks
 
 
 class MotionDataset(Dataset):
-    def __init__(self, root_dir, window_size, mode = "train", test_ratio=0.2,seed=42):
+    def __init__(self, root_dir, window_size, mode = "train", test_ratio=0.2,seed=42, test_type = "normal"):
 
         self.root_dir = root_dir
         self.test_ratio = test_ratio
         self.seed = seed
         self.window_size = window_size
         self.mode = mode
+        
 
         random.seed(seed)
         np.random.seed(seed)
 
-        self.full_dataset = self.create_dataset()
-       
-        indices = np.arange(len(self.full_dataset))
-        np.random.shuffle(indices)
+        if test_type == "normal":
 
-        total_len = len(indices)
 
-        val_size = int((test_ratio/2)*total_len)
-        train_size = total_len - 2*(val_size)
+            self.full_dataset = self.create_dataset_normal()
+        
+            indices = np.arange(len(self.full_dataset))
+            np.random.shuffle(indices)
 
-        train_ind = indices[:train_size]
-        val_ind = indices[train_size:train_size + val_size]
-        test_ind = indices[train_size + val_size:]
+            total_len = len(indices)
 
-        self.test_data = self.full_dataset[test_ind]
-        self.train_data = self.full_dataset[train_ind]
-        self.val_data = self.full_dataset[val_ind]
+            val_size = int((test_ratio/2)*total_len)
+            train_size = total_len - 2*(val_size)
 
-    def create_dataset(self):
+
+            train_ind = indices[:train_size]
+            val_ind = indices[train_size:train_size + val_size]
+            test_ind = indices[train_size + val_size:]
+
+            self.test_data = self.full_dataset[test_ind]
+            self.train_data = self.full_dataset[train_ind]
+            self.val_data = self.full_dataset[val_ind]
+        else:
+            self.full_dataset, self.test_data = self.create_dataset_user()
+        
+            indices = np.arange(len(self.full_dataset))
+            np.random.shuffle(indices)
+
+            total_len = len(indices)
+
+            val_size = int((test_ratio)*total_len)
+            train_size = total_len - val_size
+
+
+            train_ind = indices[:train_size]
+            val_ind = indices[train_size:]
+
+            test_indices =  np.arange(len(self.test_data))
+            np.random.shuffle(test_indices)
+
+            self.test_data = self.test_data[test_indices]
+            self.train_data = self.full_dataset[train_ind]
+            self.val_data = self.full_dataset[val_ind]
+
+
+
+    def create_dataset_user(self):
+        ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
+        PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
+
+        index_to_remove = random.randint(0, 4)
+        removed_person = PersonList[index_to_remove]
+
+        del PersonList[index_to_remove]
+        dataset = []
+        for i in range(len(PersonList)):
+            for j in range(len(ActivityList)):
+                data_pack = {}
+                df = pd.read_csv(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
+                df = df[1:].astype('float64')
+            
+                df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
+                # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
+                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = self.window_size, prominence = 12 )
+
+                for idx in peaks:
+                    if (idx - ((self.window_size//2)-1)) > 0:
+                        data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                        data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+                        data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+                        dataset.append(data_pack)
+
+        dataset = np.array(dataset)
+
+        test_dataset = []
+        for j in range(len(ActivityList)):
+            data_pack = {}
+            df = pd.read_csv(self.root_dir + fr"\\{removed_person}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
+            df = df[1:].astype('float64')
+        
+            df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
+            # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
+            peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = self.window_size, prominence = 12 )
+
+            for idx in peaks:
+                if (idx - ((self.window_size//2)-1)) > 0:
+                    data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                    data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+                    data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+                    test_dataset.append(data_pack)
+
+        test_dataset = np.array(test_dataset)
+
+
+        return dataset, test_dataset
+
+    def create_dataset_normal(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
         dataset = []
@@ -58,7 +136,7 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 # df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = 128, prominence = 12 )
+                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = 3, distance = self.window_size, prominence = 12 )
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
