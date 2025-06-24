@@ -9,11 +9,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 sys.path.append(os.path.abspath("CNN_Models\\AlexNet"))
 sys.path.append(os.path.abspath("CNN_Models\\Initial Model"))
 sys.path.append(os.path.abspath("CNN_Models\\VGGNet"))
-sys.path.append(os.path.abspath("CNN_Models\\Personal_Model"))
+sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model1"))
+# sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model2"))
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -27,6 +30,7 @@ from AlexNet import AlexNetCNN
 from VGGNet import VGGNetCNN
 from Test_CNN import TestCNN
 from PersModel import PersModelCNN
+
 
 
 # Metrics
@@ -51,7 +55,7 @@ def train(config, test_type, model_name):
 
 
 
-    if model_name == "initial":
+    if model_name == "resnet":
         
         model = TestCNN(input_channels= config['input_channels'],
             num_blocks=config['num_blocks'],
@@ -64,7 +68,7 @@ def train(config, test_type, model_name):
     elif model_name == "vgg":
         model = VGGNetCNN(input_channels= config['input_channels']
     )
-    elif model_name == "personal":
+    elif model_name == "model1":
         model = PersModelCNN(input_channels= config['input_channels'],
             num_features=config['num_features']
         )
@@ -310,7 +314,7 @@ def test(test_type, model_name, model = None):
     # Set Model
 
     if model is None:
-        if model_name == "initial":
+        if model_name == "resnet":
             model = TestCNN(input_channels= config['input_channels'],
                 num_blocks=config['num_blocks'],
                 num_features=config['num_features'])
@@ -318,7 +322,7 @@ def test(test_type, model_name, model = None):
             model = AlexNetCNN(input_channels= config['input_channels'])
         elif model_name == "vgg":
             model = VGGNetCNN(input_channels= config['input_channels'])
-        elif model_name == "personal":
+        elif model_name == "model1":
             model = PersModelCNN(input_channels= config['input_channels'],
             num_features=config['num_features'])
 
@@ -343,7 +347,9 @@ def test(test_type, model_name, model = None):
                                               batch_size=config["batch_size"],
                                               shuffle=True)
     
-    precision_recall = np.zeros([5, 4]) # 5 for the number of classes, 4 for the true/false positive/negative
+    precision_recall = np.zeros([5, 3]) # 5 for the number of classes, 4 for the true/false positive/negative
+    all_outputs = []
+    all_labels = []
     with torch.no_grad():
         test_pbar = tqdm(test_dataloader, desc=f"Test")
         for data_samples in test_pbar:
@@ -360,14 +366,15 @@ def test(test_type, model_name, model = None):
             output_labels = model(data)
             _, outputs = torch.max(output_labels, dim = 1)
 
+            all_outputs.extend(outputs.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
 
             #Precision and Recall calculations
 
             for i in range(5):
                 precision_recall[i,0] += (labels[outputs == i] != i).sum().item() #false positive
                 precision_recall[i,1] += (labels[outputs != i] == i).sum().item() #false negative 
-                precision_recall[i,2] += (labels[outputs != i] != i).sum().item() #true negative
-                precision_recall[i,3] += (labels[outputs == i] == i).sum().item() #true positive
+                precision_recall[i,2] += (labels[outputs == i] == i).sum().item() #true positive
 
 
             total += labels.size(0)
@@ -379,27 +386,23 @@ def test(test_type, model_name, model = None):
    
     precision_list = []
     recall_list = []
-    accuracy_list = []
+
     # find precision and recall statistics
     for i in range(5):
-        if (precision_recall[i, 3] + precision_recall[i, 0]) == 0:
+        if (precision_recall[i, 2] + precision_recall[i, 0]) == 0:
             precision = 0.0
         else:
-            precision = precision = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 0])) * 100
-        recall = (precision_recall[i, 3]/ (precision_recall[i, 3] + precision_recall[i, 1])) * 100
-        accuracy = ((precision_recall[i, 3] +precision_recall[i,2]) / (precision_recall[i, 0]+ precision_recall[i, 2] + precision_recall[i, 3] + precision_recall[i, 1])) * 100
+            precision = (precision_recall[i, 2]/ (precision_recall[i, 2] + precision_recall[i, 0])) * 100
+        recall = (precision_recall[i, 2]/ (precision_recall[i, 2] + precision_recall[i, 1])) * 100
         precision_list.append(precision)
         recall_list.append(recall)
-        accuracy_list.append(accuracy)
         print(f'Precision on Class {i} validation images: {precision:.2f}%')
         print(f'Recall on Class {i} validation images: {recall:.2f}%')
-        print(f'Accuracy on Class {i} validation images: {accuracy:.2f}%')
 
     locations = ['Tiled Hallway', 'Carpet', 'Concrete', 'Brick', 'Lawn']
 
     plt.plot(locations, precision_list, label = "Precision")
     plt.plot(locations, recall_list, label = "Recall")
-    plt.plot(locations, accuracy_list, label = "Accuracy")
     plt.xlabel("Class Label")
     plt.ylabel("Percentage")
     for i, txt in enumerate(precision_list):
@@ -408,12 +411,23 @@ def test(test_type, model_name, model = None):
     for i, txt in enumerate(recall_list):
         plt.text(locations[i], recall_list[i], f'{txt:.2f}%')
 
-    for i, txt in enumerate(accuracy_list):
-        plt.text(locations[i], accuracy_list[i], f'{txt:.2f}%')
+
     
     plt.legend()
-    plt.title("Accuracy, Precision and Recall Curve for Each Class")
-    plt.savefig(os.path.join(config['save_dir'], "Accuracy_Precision_Recall"))
+    plt.title(f"Precision and Recall Curve for Each Class, Accuracy: {accuracy:.2f}%")
+    plt.savefig(os.path.join(config['save_dir'], "Precision_Recall"))
+
+    cm = confusion_matrix(all_labels, all_outputs)
+    cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+   
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm_percent, annot=True, fmt=".1f", cmap="Blues", xticklabels=[0, 1, 2, 3, 4], yticklabels=[0, 1, 2, 3, 4])
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+    plt.title("Confusion Matrix")
+    plt.savefig(os.path.join(config['save_dir'], "Confusion_Matrix"))
+    plt.show()
 
 
     print(f'Accuracy on the {total} validation images: {accuracy:.2f}%')
@@ -432,10 +446,13 @@ if __name__ == "__main__":
         
 
         'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'save_dir': fr'CNN_Models\\Personal_Model',  # Directory specific to the model being tested 
+        'save_dir': fr'CNN_Models\\Personal_Model\\Model1',  # Directory specific to the model being tested 
         
         
         # Training parameters
+
+
+
         'batch_size': 15,                
         'num_epochs': 150,               
         'learning_rate': 5e-6,           
@@ -447,8 +464,8 @@ if __name__ == "__main__":
         'window_size' : 128,
         'num_features': 64,             
         'num_blocks': 8,      
-        'test_type' : "user",   
-        'threshold' : 2,     
+        'test_type' : "user",     
+        'threshold' : 3,     
         
 
         'checkpoint_dir': 'checkpoints', 
@@ -460,6 +477,13 @@ if __name__ == "__main__":
     
 
     if config['run_type'] == 'test':
-        test(config['test_type'], "personal")
+        test(config['test_type'], "model1")
     else:
-        train(config, config['test_type'], "personal")
+        train(config, config['test_type'], "model1")
+
+
+
+
+
+
+
