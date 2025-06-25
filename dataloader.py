@@ -79,9 +79,10 @@ class MotionDataset(Dataset):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
 
-        index_to_remove = random.randint(0, 4)
+        index_to_remove = np.random.default_rng().integers(0, 5)
+        
         removed_person = PersonList[index_to_remove]
-
+        
         del PersonList[index_to_remove]
         dataset = []
         for i in range(len(PersonList)):

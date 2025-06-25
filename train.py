@@ -16,7 +16,7 @@ sys.path.append(os.path.abspath("CNN_Models\\AlexNet"))
 sys.path.append(os.path.abspath("CNN_Models\\Initial Model"))
 sys.path.append(os.path.abspath("CNN_Models\\VGGNet"))
 sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model1"))
-# sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model2"))
+sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model2"))
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -30,6 +30,7 @@ from AlexNet import AlexNetCNN
 from VGGNet import VGGNetCNN
 from Test_CNN import TestCNN
 from PersModel import PersModelCNN
+from SecondModel import SecondModelCNN
 
 
 
@@ -70,6 +71,10 @@ def train(config, test_type, model_name):
     )
     elif model_name == "model1":
         model = PersModelCNN(input_channels= config['input_channels'],
+            num_features=config['num_features']
+        )
+    elif model_name == "model2":
+       model = SecondModelCNN(input_channels= config['input_channels'],
             num_features=config['num_features']
         )
 
@@ -325,6 +330,9 @@ def test(test_type, model_name, model = None):
         elif model_name == "model1":
             model = PersModelCNN(input_channels= config['input_channels'],
             num_features=config['num_features'])
+        elif model_name == "model2":
+            model = SecondModelCNN(input_channels= config['input_channels'],
+            num_features=config['num_features'])
 
 
         checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
@@ -446,7 +454,7 @@ if __name__ == "__main__":
         
 
         'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'save_dir': fr'CNN_Models\\Personal_Model\\Model1',  # Directory specific to the model being tested 
+        'save_dir': fr'CNN_Models\\Personal_Model\\Model2',  # Directory specific to the model being tested 
         
         
         # Training parameters
@@ -477,9 +485,9 @@ if __name__ == "__main__":
     
 
     if config['run_type'] == 'test':
-        test(config['test_type'], "model1")
+        test(config['test_type'], "model2")
     else:
-        train(config, config['test_type'], "model1")
+        train(config, config['test_type'], "model2")
 
 
 
