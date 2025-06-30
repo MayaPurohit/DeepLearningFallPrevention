@@ -40,7 +40,7 @@ from SecondModel import SecondModelCNN
 
 
 
-def train(config, test_type, model_name):
+def train(config):
     """
     Train the SuperResolution model
     
@@ -56,26 +56,29 @@ def train(config, test_type, model_name):
 
 
 
-    if model_name == "resnet":
+    if config['model_name'] == "resnet":
         
         model = TestCNN(input_channels= config['input_channels'],
             num_blocks=config['num_blocks'],
             num_features=config['num_features'],
         )
-    elif model_name == "alex":
+    elif config['model_name'] == "alex":
         model = AlexNetCNN(input_channels= config['input_channels']
         )
 
-    elif model_name == "vgg":
+    elif config['model_name'] == "vgg":
         model = VGGNetCNN(input_channels= config['input_channels']
     )
-    elif model_name == "model1":
+    elif config['model_name'] == "model1":
         model = PersModelCNN(input_channels= config['input_channels'],
-            num_features=config['num_features']
+            num_features=config['num_features'],
+            include_attention=config['include_attention']
         )
-    elif model_name == "model2":
+    elif config['model_name'] == "model2":
        model = SecondModelCNN(input_channels= config['input_channels'],
-            num_features=config['num_features']
+            num_features=config['num_features'], 
+            num_blocks=config['num_blocks'],
+            include_attention=config['include_attention']
         )
 
 
@@ -105,8 +108,8 @@ def train(config, test_type, model_name):
     loss_fn = nn.CrossEntropyLoss()
 
 
-    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="train", threshold= config['threshold'], test_type = test_type)
-    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'], mode ="val", threshold= config['threshold'], test_type = test_type)
+    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], mode ="train", threshold= config['threshold'], test_type = config['test_type'])
+    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], mode ="val", threshold= config['threshold'], test_type = config['test_type'])
 
     train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset,
                                               batch_size=config["batch_size"],
@@ -145,6 +148,7 @@ def train(config, test_type, model_name):
             
           
             data_sample = batch['data_sample'].to(device)
+          
             class_label = batch['class_label'].to(device)
             
        
@@ -282,7 +286,7 @@ def evaluate(data_loader, model, num_epoch):
                 data_samples["data_sample"] = data_samples["data_sample"].cuda()
                 data_samples["class_label"] = data_samples["class_label"] .cuda()
             
-            
+           
             data = data_samples["data_sample"]
             labels = data_samples["class_label"]
             data = data.permute(0, 2, 1) 
@@ -305,7 +309,7 @@ def evaluate(data_loader, model, num_epoch):
     return accuracy
 
 
-def test(test_type, model_name, model = None):
+def test(model = None):
     """
     Evaluate the Siamese network
     
@@ -319,20 +323,22 @@ def test(test_type, model_name, model = None):
     # Set Model
 
     if model is None:
-        if model_name == "resnet":
+        if config['model_name'] == "resnet":
             model = TestCNN(input_channels= config['input_channels'],
                 num_blocks=config['num_blocks'],
                 num_features=config['num_features'])
-        elif model_name == "alex":
+        elif config['model_name'] == "alex":
             model = AlexNetCNN(input_channels= config['input_channels'])
-        elif model_name == "vgg":
+        elif config['model_name'] == "vgg":
             model = VGGNetCNN(input_channels= config['input_channels'])
-        elif model_name == "model1":
+        elif config['model_name'] == "model1":
             model = PersModelCNN(input_channels= config['input_channels'],
             num_features=config['num_features'])
-        elif model_name == "model2":
+        elif config['model_name'] == "model2":
             model = SecondModelCNN(input_channels= config['input_channels'],
-            num_features=config['num_features'])
+            num_features=config['num_features'],
+            num_blocks=config['num_blocks'],
+            include_attention=config['include_attention'])
 
 
         checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
@@ -349,7 +355,7 @@ def test(test_type, model_name, model = None):
 
     #Make dataset and dataloader 
 
-    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], mode ="test", threshold= config['threshold'], test_type = test_type)
+    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], mode ="test", threshold= config['threshold'], test_type = config['test_type'])
    
     test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=config["batch_size"],
@@ -454,26 +460,30 @@ if __name__ == "__main__":
         
 
         'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'save_dir': fr'CNN_Models\\Personal_Model\\Model2',  # Directory specific to the model being tested 
+        'save_dir': fr'CNN_Models\\Personal_Model\\Model1',  # Directory specific to the model being tested 
         
         
         # Training parameters
 
 
 
-        'batch_size': 15,                
-        'num_epochs': 150,               
-        'learning_rate': 5e-6,           
+        'batch_size': 10,                
+        'num_epochs': 50,               
+        'learning_rate': 1e-5,           
         'lr_decay_step': 30,            
         'lr_decay_gamma': 0.5,           
         'validation_interval': 5,        
         'input_channels'   : 6,
-        'test_ratio' : 0.2,
-        'window_size' : 128,
+        'test_ratio' : 0.7,
+        'val_ratio': 0.2,
+        'window_size' : 64,
         'num_features': 64,             
-        'num_blocks': 8,      
-        'test_type' : "user",     
-        'threshold' : 3,     
+        'num_blocks': 0,      
+        'test_type' : "normal", 
+        'normalize' : False,    
+        'threshold' : 1,     
+        'include_attention': True,
+        'model_name': "model1",
         
 
         'checkpoint_dir': 'checkpoints', 
@@ -485,9 +495,9 @@ if __name__ == "__main__":
     
 
     if config['run_type'] == 'test':
-        test(config['test_type'], "model2")
+        test()
     else:
-        train(config, config['test_type'], "model2")
+        train(config)
 
 
 
