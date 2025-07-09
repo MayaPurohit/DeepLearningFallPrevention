@@ -13,6 +13,9 @@ import torchvision.transforms.functional as TF
 import pandas as pd
 from scipy.signal import find_peaks
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import cross_val_score
+from sklearn import datasets
+from sklearn import svm
 
 
 
@@ -20,8 +23,8 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 class MotionDataset(Dataset):
-    def __init__(self, root_dir, window_size, mode = "train", threshold = 3, test_ratio=0.2, 
-                 val_ratio = 0.2, normalize = False, input_channels = 6, user_num = 0, seed=42, test_type = "normal"):
+    def __init__(self, root_dir, window_size, mode = "train", test_ratio=0.2, 
+                 val_ratio = 0.2, normalize = False, input_channels = 6, user_num = 1, seed=42, test_type = "normal"):
 
         self.root_dir = root_dir
         self.test_ratio = test_ratio
@@ -29,7 +32,6 @@ class MotionDataset(Dataset):
         self.seed = seed
         self.window_size = window_size
         self.mode = mode
-        self.threshold = threshold
         self.index_to_remove_test = 1
         self.index_to_remove_val = 2
         self.normalize = normalize
@@ -114,14 +116,16 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
+
+                normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+                peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 11:]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                         else:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
                         data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
@@ -138,14 +142,15 @@ class MotionDataset(Dataset):
         
             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-            peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
+            normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+            peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
             for idx in peaks:
                 if (idx - ((self.window_size//2)-1)) > 0:
                     if self.input_channels == 2:
-                        data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 11:]
+                        data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                     else:
-                        data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                        data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                     if self.normalize:
                         data_sample[:] = self.scaler.fit_transform(data_sample)
                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
@@ -169,14 +174,15 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
+                normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+                peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 11:]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                         else:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
                         data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
@@ -210,14 +216,16 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
+                
+                normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+                peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 11:]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                         else:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
                         data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
@@ -235,14 +243,16 @@ class MotionDataset(Dataset):
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
+                
+                normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+                peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 11:]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                         else:
-                            data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
                         data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
@@ -258,7 +268,7 @@ class MotionDataset(Dataset):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
 
-        chosen_ind = PersonList[self.user_num]
+        chosen_ind = PersonList[self.user_num - 1]
         dataset = []
         for j in range(len(ActivityList)):
             data_pack = {}
@@ -267,14 +277,16 @@ class MotionDataset(Dataset):
         
             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-            peaks, _ = find_peaks(df['Composed_Acceleration'], threshold = self.threshold, distance = self.window_size, prominence = 12 )
+            
+            normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+            peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
             for idx in peaks:
                 if (idx - ((self.window_size//2)-1)) > 0:
                     if self.input_channels == 2:
-                        data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 11:]
+                        data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                     else:
-                        data_sample = df.iloc[idx - ((self.window_size//2)-1): idx + (self.window_size//2), 1:7]
+                        data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                     if self.normalize:
                         data_sample[:] = self.scaler.fit_transform(data_sample)
                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
