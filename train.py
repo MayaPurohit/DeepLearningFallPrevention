@@ -17,6 +17,8 @@ sys.path.append(os.path.abspath("CNN_Models\\Initial Model"))
 sys.path.append(os.path.abspath("CNN_Models\\VGGNet"))
 sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model1"))
 sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model2"))
+sys.path.append(os.path.abspath("CNN_Models\\Personal_Model\\Model3"))
+sys.path.append(os.path.abspath("LSTM_Model"))
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -25,12 +27,14 @@ import wandb
 import time
 import psutil
 
-from dataloader import MotionDataset
+from CNN_Dataloader import MotionDataset
 from AlexNet import AlexNetCNN
 from VGGNet import VGGNetCNN
 from Test_CNN import TestCNN
-from PersModel import PersModelCNN
-from SecondModel import SecondModelCNN
+from Model1 import PersModelCNN
+from Model2 import SecondModelCNN
+from LSTMModel import LSTM_Model
+from Model3 import Model3CNN
 
 
 
@@ -58,7 +62,7 @@ def train(config):
 
     if config['model_name'] == "resnet":
         
-        model = TestCNN(input_channels= config['input_channels'],
+        model = TestCNN(include_attention=config['include_attention'], input_channels= config['input_channels'],
             num_blocks=config['num_blocks'],
             num_features=config['num_features'],
         )
@@ -80,6 +84,12 @@ def train(config):
             num_blocks=config['num_blocks'],
             include_attention=config['include_attention']
         )
+    elif config['model_name']  == "LSTM":
+        model = LSTM_Model(input_size = config['input_channels'],
+                          hidden_size = config['hidden_size'],
+                          num_layers = config['num_layers'],
+                          batch_first = config['batch_first'])
+
 
 
 
@@ -108,8 +118,8 @@ def train(config):
     loss_fn = nn.CrossEntropyLoss()
 
 
-    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], mode ="train", threshold= config['threshold'], test_type = config['test_type'])
-    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], mode ="val", threshold= config['threshold'], test_type = config['test_type'])
+    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'],user_num= config['user_num'], mode ="train", test_type = config['test_type'])
+    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'],user_num= config['user_num'], mode ="val", test_type = config['test_type'])
 
     train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset,
                                               batch_size=config["batch_size"],
@@ -128,6 +138,7 @@ def train(config):
     
     
     wandb.config = {
+
     "epochs": config["num_epochs"],
     "batch_size": train_dataloader.batch_size,
     "learning_rate": config["learning_rate"],
@@ -141,6 +152,8 @@ def train(config):
         model.train()
         epoch_losses = []
         
+        correct = 0.0
+        total = 0.0
        
         train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config['num_epochs']}")
         #For each batch
@@ -148,14 +161,16 @@ def train(config):
             
           
             data_sample = batch['data_sample'].to(device)
+            
+            
           
             class_label = batch['class_label'].to(device)
             
        
             optimizer.zero_grad()
             
-            
-            data_sample = data_sample.permute(0, 2, 1) 
+            if config["model_name"] != "LSTM":
+                data_sample = data_sample.permute(0, 2, 1) 
             start = time.time()
             output = model(data_sample)
             
@@ -166,7 +181,7 @@ def train(config):
             latency_vals.append(latency)
             throughput_vals.append(throughput)
     
-
+            output_labels = torch.argmax(output, dim = 1)
             loss =  loss_fn(output, class_label)
             
             
@@ -176,8 +191,17 @@ def train(config):
             
             epoch_losses.append(loss.item())
             train_pbar.set_postfix({"loss": f"{loss.item():.4f}"})
-            
+            total += class_label.size(0)
+            correct += (output_labels == class_label).sum().item()
         
+        train_accuracy = 100 * correct / total
+        print(f'Accuracy on the {total} training images: {train_accuracy:.2f}%')
+
+
+        wandb.log({
+        f"Train Accuracy": train_accuracy,
+        "epoch": epoch + 1})
+    
         scheduler.step()
         
        
@@ -186,7 +210,7 @@ def train(config):
 
         print("Training Loss: ", train_loss)
 
-        wandb.log({"train_loss": train_loss, "epoch": epoch + 1})
+        wandb.log({"Train Loss": train_loss, "epoch": epoch + 1})
         
        #check if the model should be validated 
         should_validate = (
@@ -289,7 +313,9 @@ def evaluate(data_loader, model, num_epoch):
            
             data = data_samples["data_sample"]
             labels = data_samples["class_label"]
-            data = data.permute(0, 2, 1) 
+            
+            if config["model_name"] != "LSTM":
+                data = data.permute(0, 2, 1) 
             
             #Check to see how many samples were classified correctly 
             output_labels = model(data)
@@ -324,9 +350,10 @@ def test(model = None):
 
     if model is None:
         if config['model_name'] == "resnet":
-            model = TestCNN(input_channels= config['input_channels'],
-                num_blocks=config['num_blocks'],
-                num_features=config['num_features'])
+            model = TestCNN(include_attention=config['include_attention'],
+                            input_channels= config['input_channels'],
+                            num_blocks=config['num_blocks'],
+                            num_features=config['num_features'])
         elif config['model_name'] == "alex":
             model = AlexNetCNN(input_channels= config['input_channels'])
         elif config['model_name'] == "vgg":
@@ -339,12 +366,24 @@ def test(model = None):
             num_features=config['num_features'],
             num_blocks=config['num_blocks'],
             include_attention=config['include_attention'])
+        elif config['model_name'] == "model3":
+            model = Model3CNN(input_channels= config['input_channels'],
+                num_features=config['num_features'],
+                include_attention=config['include_attention']
+            )
+        elif config['model_name']  == "LSTM":
+            model = LSTM_Model(input_size = config['input_channels'],
+                          hidden_size = config['hidden_size'],
+                          num_layers = config['num_layers'],
+                          batch_first = config['batch_first'])
 
 
-        checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
-
+        # checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
+        checkpoint = torch.load(os.path.join('CNN_Models\\Personal_Model\\Model3\\NoAttention', config['best_dir'], 'best_model3.pth'))
 
         model.load_state_dict(checkpoint['model_state_dict'])
+        for name, param in model.named_parameters():
+            print(f"Layer: {name}, Shape: {param.shape}, Requires grad: {param.requires_grad}")
         print(f"Loaded model from {config['best_dir']}")
 
     print("Testing")
@@ -355,7 +394,7 @@ def test(model = None):
 
     #Make dataset and dataloader 
 
-    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], mode ="test", threshold= config['threshold'], test_type = config['test_type'])
+    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'], user_num= config['user_num'], mode ="test", test_type = config['test_type'])
    
     test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset,
                                               batch_size=config["batch_size"],
@@ -375,7 +414,9 @@ def test(model = None):
             
             data = data_samples["data_sample"]
             labels = data_samples["class_label"]
-            data = data.permute(0, 2, 1) 
+            if config["model_name"] != "LSTM":
+                data = data.permute(0, 2, 1) 
+            
             
             output_labels = model(data)
             _, outputs = torch.max(output_labels, dim = 1)
@@ -460,11 +501,10 @@ if __name__ == "__main__":
         
 
         'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'save_dir': fr'CNN_Models\\Personal_Model\\Model1',  # Directory specific to the model being tested 
+        'save_dir': fr'CNN_Models\\Personal_Model\\Model3\\test',  # Directory specific to the model being tested 
         
         
-        # Training parameters
-
+        # CNN Training parameters
 
 
         'batch_size': 10,                
@@ -473,18 +513,23 @@ if __name__ == "__main__":
         'lr_decay_step': 30,            
         'lr_decay_gamma': 0.5,           
         'validation_interval': 5,        
-        'input_channels'   : 6,
-        'test_ratio' : 0.7,
-        'val_ratio': 0.2,
-        'window_size' : 64,
-        'num_features': 64,             
-        'num_blocks': 0,      
+        'input_channels'   : 2,
+        'test_ratio' : 0.1,
+        'val_ratio': 0.1,
+        'window_size' : 50,
+        'num_features': 128,             
+        'num_blocks': 5,      
         'test_type' : "normal", 
-        'normalize' : False,    
-        'threshold' : 1,     
-        'include_attention': True,
-        'model_name': "model1",
+        'normalize' : False,       
+        'include_attention': False,
+        'user_num' : 1,
+        'model_name': "model3",
         
+
+        # LSTM Training parameters
+        'hidden_size': 64,
+        'num_layers': 32,
+        'batch_first': True,
 
         'checkpoint_dir': 'checkpoints', 
         'run_type' : 'test',
