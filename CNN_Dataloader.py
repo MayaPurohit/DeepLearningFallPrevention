@@ -42,7 +42,7 @@ class MotionDataset(Dataset):
         random.seed(seed)
         np.random.seed(seed)
 
-        if test_type == "normal" or test_type == "individual" or test_type == "olivia":
+        if test_type == "normal" or test_type == "individual" or test_type == "olivia" or test_type == "maya":
 
             if test_type == "normal":
                 self.full_dataset = self.create_dataset_normal()
@@ -50,6 +50,8 @@ class MotionDataset(Dataset):
                 self.full_dataset = self.create_dataset_individual()
             elif test_type == "olivia":
                 self.full_dataset = self.create_dataset_olivia()
+            elif test_type == "maya":
+                self.full_dataset = self.create_dataset_maya()
 
         
             print(type(self.full_dataset))
@@ -326,6 +328,25 @@ class MotionDataset(Dataset):
                 for k in range(1, NumSamplesPerLocation[l] + 1):
                     if self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.dat" == self.root_dir + fr"\\User4_LocationB_Normal_1.dat":
                         continue
+                    data_pack = {}
+                    data_sample = np.loadtxt(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.dat", delimiter = ',')
+                    data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
+                    data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+                    dataset.append(data_pack)
+    
+    def create_dataset_maya(self):
+
+        ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
+        PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
+        NumSamplesPerLocation = [156, 147, 154, 160, 142, 156, 125, 155, 136, 121, 147, 101, 144, 152, 138, 149, 152, 161, 150, 146, 149, 143, 146, 155, 140]
+        dataset = []
+        l = -1
+        for i in range(len(PersonList)):
+            for j in range(len(ActivityList)):
+                l +=1 
+                for k in range(1, NumSamplesPerLocation[l] + 1):
+                    # if self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.dat" == self.root_dir + fr"\\User4_LocationB_Normal_1.dat":
+                    #     continue
                     data_pack = {}
                     data_sample = np.loadtxt(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.dat", delimiter = ',')
                     data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
