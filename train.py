@@ -84,6 +84,10 @@ def train(config):
             num_blocks=config['num_blocks'],
             include_attention=config['include_attention']
         )
+    elif config['model_name'] == "model3":
+        model = Model3CNN(input_channels= config['input_channels'],
+            num_features=config['num_features'],
+            include_attention=config['include_attention'])
     elif config['model_name']  == "LSTM":
         model = LSTM_Model(input_size = config['input_channels'],
                           hidden_size = config['hidden_size'],
@@ -119,16 +123,18 @@ def train(config):
 
 
     train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'],user_num= config['user_num'], mode ="train", test_type = config['test_type'])
-    val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'],user_num= config['user_num'], mode ="val", test_type = config['test_type'])
+    #val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'],user_num= config['user_num'], mode ="val", test_type = config['test_type'])
 
     train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset,
                                               batch_size=config["batch_size"],
                                               shuffle=True)
+    
+    # print("Training Set Size: ", len(train_dataloader.dataset))
     num_samples = len(train_dataloader.dataset)
 
-    val_dataloader = torch.utils.data.DataLoader(dataset=val_dataset,
-                                              batch_size=config["batch_size"],
-                                              shuffle=True)
+    # val_dataloader = torch.utils.data.DataLoader(dataset=val_dataset,
+    #                                           batch_size=config["batch_size"],
+    #                                           shuffle=True)
    
     train_losses = []
     best_accuracy = 0
@@ -149,6 +155,8 @@ def train(config):
     cpu_start = process.cpu_percent()
 
     for epoch in range(0, config['num_epochs']):
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch {epoch+1}: Learning Rate = {current_lr:.6f}")
         model.train()
         epoch_losses = []
         
@@ -213,24 +221,24 @@ def train(config):
         wandb.log({"Train Loss": train_loss, "epoch": epoch + 1})
         
        #check if the model should be validated 
-        should_validate = (
-            config['validation_interval'] > 0 and 
-            (epoch + 1) % config['validation_interval'] == 0
-        ) or (epoch + 1 == config['num_epochs'])
+        # should_validate = (
+        #     config['validation_interval'] > 0 and 
+        #     (epoch + 1) % config['validation_interval'] == 0
+        # ) or (epoch + 1 == config['num_epochs'])
         
-        if should_validate:
+        # if should_validate:
 
-            accuracy = evaluate(val_dataloader, model, num_epoch= epoch + 1)
-            if accuracy >= best_accuracy:
-                best_accuracy = accuracy
-                torch.save({
-                    'epoch': epoch + 1,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'accuracy': accuracy,
-                }, os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
+        #     accuracy = evaluate(val_dataloader, model, num_epoch= epoch + 1)
+        #     if accuracy >= best_accuracy:
+        #         best_accuracy = accuracy
+        #         torch.save({
+        #             'epoch': epoch + 1,
+        #             'model_state_dict': model.state_dict(),
+        #             'optimizer_state_dict': optimizer.state_dict(),
+        #             'accuracy': accuracy,
+        #         }, os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
 
-                print(f"Saved best model with accuracy: {accuracy:.2f}")
+        #         print(f"Saved best model with accuracy: {accuracy:.2f}")
           
         if (epoch + 1) % config['save_every'] == 0:
             torch.save({
@@ -378,8 +386,8 @@ def test(model = None):
                           batch_first = config['batch_first'])
 
 
-        # checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], 'best_model.pth'))
-        checkpoint = torch.load(os.path.join('CNN_Models\\Personal_Model\\Model3\\NoAttention', config['best_dir'], 'best_model3.pth'))
+        checkpoint = torch.load(os.path.join(config['save_dir'], config['checkpoint_dir'], 'checkpoint_epoch_30.pth'))
+
 
         model.load_state_dict(checkpoint['model_state_dict'])
         for name, param in model.named_parameters():
@@ -500,15 +508,15 @@ if __name__ == "__main__":
 
         
 
-        'root_dir': fr'~\\DeepLearningFallDetection\\data',  # Training data directory
-        'save_dir': fr'CNN_Models\\Personal_Model\\Model3\\test',  # Directory specific to the model being tested 
+        'root_dir': fr'C:\\Users\\mayam\\DeepLearningFallDetection\\data',  # Training data directory
+        'save_dir': fr'CNN_Models\\Personal_Model\\Model3\\Individual',  # Directory specific to the model being tested 
         
         
         # CNN Training parameters
 
 
         'batch_size': 10,                
-        'num_epochs': 50,               
+        'num_epochs': 30,               
         'learning_rate': 1e-5,           
         'lr_decay_step': 30,            
         'lr_decay_gamma': 0.5,           
@@ -532,7 +540,7 @@ if __name__ == "__main__":
         'batch_first': True,
 
         'checkpoint_dir': 'checkpoints', 
-        'run_type' : 'test',
+        'run_type' : 'train',
         'best_dir': 'best_model',         # Directory to save sample images
         'save_every': 5,                 # Save checkpoint every N epochs
         'resume': None,                  # Path to checkpoint to resume from
