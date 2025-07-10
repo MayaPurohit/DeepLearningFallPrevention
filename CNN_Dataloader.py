@@ -56,7 +56,8 @@ class MotionDataset(Dataset):
         
             print(type(self.full_dataset))
             indices = np.arange(len(self.full_dataset))
-            np.random.shuffle(indices)
+            # np.random.shuffle(indices)
+            print(indices)
 
 
             total_len = len(indices)
@@ -67,8 +68,6 @@ class MotionDataset(Dataset):
 
 
             train_ind = indices[:train_size]
-            print(train_ind)
-            print(train_ind.size)
             val_ind = indices[train_size:train_size + val_size]
             test_ind = indices[train_size + val_size:]
 
@@ -109,7 +108,7 @@ class MotionDataset(Dataset):
 
 
 
-
+# Dataset with  4 users in train, 5th user in test 
     def create_dataset_user(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
@@ -122,7 +121,7 @@ class MotionDataset(Dataset):
         dataset = []
         for i in range(len(PersonList)):
             for j in range(len(ActivityList)):
-                data_pack = {}
+                
                 df = pd.read_csv(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
@@ -133,6 +132,7 @@ class MotionDataset(Dataset):
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
+                    data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
                             data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
@@ -148,7 +148,7 @@ class MotionDataset(Dataset):
 
         test_dataset = []
         for j in range(len(ActivityList)):
-            data_pack = {}
+            
             df = pd.read_csv(self.root_dir + fr"\\{removed_person}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
             df = df[1:].astype('float64')
         
@@ -159,6 +159,7 @@ class MotionDataset(Dataset):
             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
             for idx in peaks:
+                data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
                     if self.input_channels == 2:
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
@@ -175,13 +176,13 @@ class MotionDataset(Dataset):
 
         return dataset, test_dataset
 
+    # Dataset with all 5 users (5 users in train, val and test set)
     def create_dataset_normal(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
         dataset = []
         for i in range(len(PersonList)):
             for j in range(len(ActivityList)):
-                data_pack = {}
                 df = df = pd.read_csv(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
@@ -189,19 +190,21 @@ class MotionDataset(Dataset):
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
                 normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
-
+                # print(len(peaks))
                 k = 0
                 for idx in peaks:
+                    data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
                             data_sample = df.iloc[idx - ((self.window_size//2-1)): idx + (self.window_size//2+1), 11:]
-                            np.savetxt(f"C:\\Users\\mayam\\DeepLearningFallDetection\\SavedData\\{PersonList[i]}_{ActivityList[j]}_Normal_{k+1}.dat", data_sample, delimiter=',')
-                            k += 1
                         else:
                             data_sample = df.iloc[idx - ((self.window_size//2-1)): idx + (self.window_size//2 +1), 1:7]
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
                         data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+                        np.save(f"C:\\Users\\mayam\\DeepLearningFallDetection\\SavedData\\{PersonList[i]}_{ActivityList[j]}_Normal_{k+1}.npy", data_sample.to_numpy())
+                        np.save(f"C:\\Users\\mayam\\DeepLearningFallDetection\\SavedData\\{PersonList[i]}_{ActivityList[j]}_Label_{k+1}.npy", j)
+                        k += 1
                         data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
                         dataset.append(data_pack)
 
@@ -210,6 +213,7 @@ class MotionDataset(Dataset):
         return dataset
 
 
+    # 3 users in train, 1 user in val, and the last user in test 
     def create_dataset_both(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
@@ -226,7 +230,7 @@ class MotionDataset(Dataset):
         dataset = []
         for i in range(len(PersonList)):
             for j in range(len(ActivityList)):
-                data_pack = {}
+                
                 df = pd.read_csv(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
@@ -237,6 +241,7 @@ class MotionDataset(Dataset):
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
+                    data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
                             data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
@@ -253,7 +258,7 @@ class MotionDataset(Dataset):
         test_val_set = [[], []]
         for i in range(len(removed_people)):
             for j in range(len(ActivityList)):
-                data_pack = {}
+               
                 df = pd.read_csv(self.root_dir + fr"\\{removed_people[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
@@ -264,6 +269,7 @@ class MotionDataset(Dataset):
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
                 for idx in peaks:
+                    data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
                             data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
@@ -280,6 +286,7 @@ class MotionDataset(Dataset):
 
         return dataset, test_val_set[0], test_val_set[1]
     
+    # Dataset for only one user 
     def create_dataset_individual(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
@@ -287,7 +294,7 @@ class MotionDataset(Dataset):
         chosen_ind = PersonList[self.user_num - 1]
         dataset = []
         for j in range(len(ActivityList)):
-            data_pack = {}
+            
             df = pd.read_csv(self.root_dir + fr"\\{chosen_ind}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
             df = df[1:].astype('float64')
         
@@ -297,6 +304,7 @@ class MotionDataset(Dataset):
             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
             i = 0
             for idx in peaks:
+                data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
                     if self.input_channels == 2:
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
@@ -308,6 +316,7 @@ class MotionDataset(Dataset):
                         data_sample[:] = self.scaler.fit_transform(data_sample)
                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+                    
                     dataset.append(data_pack)
 
         dataset = np.array(dataset)
@@ -315,6 +324,7 @@ class MotionDataset(Dataset):
         return dataset
 
 
+    # Read data in from Olivia's Datasets
     def create_dataset_olivia(self):
 
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
@@ -334,6 +344,7 @@ class MotionDataset(Dataset):
                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
                     dataset.append(data_pack)
     
+    # Read in my data
     def create_dataset_maya(self):
 
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
@@ -345,12 +356,15 @@ class MotionDataset(Dataset):
             for j in range(len(ActivityList)):
                 l +=1 
                 for k in range(1, NumSamplesPerLocation[l] + 1):
-                    # if self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.dat" == self.root_dir + fr"\\User4_LocationB_Normal_1.dat":
-                    #     continue
                     data_pack = {}
-                    data_sample = np.loadtxt(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.dat", delimiter = ',')
+                    data_sample = np.load(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Normal_{k}.npy")
+                    class_label = np.load(self.root_dir + fr"\\{PersonList[i]}_{ActivityList[j]}_Label_{k}.npy")
                     data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
-                    data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+                    
+                    data_pack["class_label"] = torch.tensor(class_label, dtype=torch.long)
+                    # print(type(class_label[0]))
+                    # print(torch.tensor(j, dtype=torch.long))
+                    # print(k)
                     dataset.append(data_pack)
 
 
