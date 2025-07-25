@@ -13,6 +13,43 @@ import math
 
 import torch.nn as nn
 
+
+class SelfAttention(nn.Module):
+    def __init__(self, embed_size):
+        super(SelfAttention, self).__init__()
+        self.embed_size = embed_size
+        
+        
+     
+        self.query = nn.Linear(self.embed_size, self.embed_size)
+        self.key = nn.Linear(self.embed_size, self.embed_size)
+        self.value = nn.Linear(self.embed_size, self.embed_size)
+
+    def scaled_dot_product_attention(self, Q, K, V, mask=None):
+        d_k = Q.size(-1)
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / torch.sqrt(torch.tensor(d_k, dtype=torch.float32))
+
+     
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, float('-inf'))
+
+        #transform into proabilities
+        attention_weights = F.softmax(scores, dim=-1)
+        
+        #get weighted values 
+        output = torch.matmul(attention_weights, V)
+        return output, attention_weights
+    
+    def forward(self, x, mask=None):
+        #make the query, key, and value models
+        Q = self.query(x)
+        K = self.key(x)
+        V = self.value(x)
+        
+        
+        out, _ = self.scaled_dot_product_attention(Q, K, V, mask)
+        return out
+
   
 class ResidualBlock(nn.Module):
     """Residual block with skip connection"""
@@ -65,6 +102,8 @@ class SecondModelCNN2d(nn.Module):
 
         )
 
+        self.block1 = ResidualBlock(num_features)
+
 
         self.mid_conv = nn.Sequential(
             nn.Conv2d(num_features, num_features*2, 3, 1, padding=1),
@@ -75,7 +114,7 @@ class SecondModelCNN2d(nn.Module):
 
 
 
-
+        self.block2 = ResidualBlock(num_features*2)
         self.mid_conv2 = nn.Sequential(
             nn.Conv2d(num_features*2, num_features*4, 3, 1, padding=1),
             nn.BatchNorm2d(num_features*4),
@@ -87,12 +126,15 @@ class SecondModelCNN2d(nn.Module):
 
 
 
-        blocks = []
-        for i in range(num_blocks):
-            block = ResidualBlock(num_features*4)
-            blocks.append(block)
+        # blocks = []
+        # for i in range(num_blocks):
+        #     block = ResidualBlock(num_features*4)
+        #     blocks.append(block)
 
-        self.blocks = nn.Sequential(*blocks)
+        # self.blocks = nn.Sequential(*blocks)
+
+        self.block3 = ResidualBlock(num_features*4)
+        self.attention = SelfAttention(num_features*4)
 
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.fc_layer = nn.Linear(num_features*4, num_features*4)
@@ -120,17 +162,31 @@ class SecondModelCNN2d(nn.Module):
         x = x.view(x.size(0), 1, self.num_stack*2, 50) 
         x = self.initial_conv(x)
 
+        x = self.block1(x)
        
         x = self.mid_conv(x)
         
-
+        x = self.block2(x)
 
         x = self.mid_conv2(x)
 
+        x = self.block3(x)
 
 
 
-        x = self.blocks(x)
+        if self.include_attention == True:
+            x = x.view(x.size(0), x.size(1), -1)  # [10, 200, 24]
+            x = x.permute(0, 2, 1) 
+
+            x  = self.attention(x)
+
+            x = x.permute(0, 2, 1)               # [10, 200, 24]
+            x = x.view(x.size(0), x.size(1), 1, x.size(2))
+            
+            # x = x.permute(1, 2, 0)
+
+
+        # x = self.blocks(x)
 
 
 
