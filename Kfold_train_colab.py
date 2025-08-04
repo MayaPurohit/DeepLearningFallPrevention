@@ -96,18 +96,19 @@ def train(config):
 
 
     all_accuracy = np.zeros(5)
+    complete_accs = np.zeros((5,10))
     all_cpu = np.zeros(5)
     for k in range(len(config['user_num'])):
         print(config['user_num'][k])
         fig, ax = plt.subplots(4,5, figsize = (12,8), sharex='col', sharey= 'row')
         train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'], num_stacks= config['num_stacks'], user_num= config['user_num'][k], mode ="train", test_type = config['test_type'])
-
+        
         
         #Define K-Folds Setup
 
         kf = KFold(n_splits=config['num_folds'], shuffle=True, random_state=42)
 
-        cpu_results = np.zeros(10)
+        cpu_results = np.zeros(config['num_folds'])
         fold_results = np.zeros(config['num_folds'])
         for fold, (train_idx, val_idx) in enumerate(kf.split(train_dataset)):
             print(f"\nFOLD {fold+1}/{config['num_folds']}")
@@ -141,9 +142,11 @@ def train(config):
                                   include_attention = config['include_attention'])
 
             elif config['model_name'] == "vgg":
-                model = VGGNetCNN(input_channels= config['input_channels'])
+                model = VGGNetCNN(input_channels= config['input_channels'], 
+                                  num_stacks=config['num_stacks'])
             elif config['model_name'] == "model1":
                 model = PersModelCNN(input_channels= config['input_channels'],
+                                     num_stacks=config['num_stacks'],
                     num_features=config['num_features'],
                     include_attention=config['include_attention']
                 )
@@ -352,9 +355,11 @@ def train(config):
             plt.savefig(os.path.join(config['save_dir'], "Fold Accuracy Overall"))
         plt.close() 
 
-        average_accuracy = test(user_ind=k)
+        fold_accs, average_accuracy = test(user_ind=k)
+        complete_accs[k] = fold_accs
         all_accuracy[k] = average_accuracy
     print(f"Test Accuracy for Each User: All: {all_accuracy/100}, Avg: {np.mean(all_accuracy)/100}")
+    print(f"Test Accuracy for Each User: All: {complete_accs/100}")
     print(f"CPU Usage for Each User All: {all_cpu}, Avg: {np.mean(all_cpu)}")
 
             
@@ -437,9 +442,11 @@ def test(user_ind, model = None):
                                   num_blocks = config['num_blocks'], 
                                   include_attention = config['include_attention'])
         elif config['model_name'] == "vgg":
-            model = VGGNetCNN(input_channels= config['input_channels'])
+            model = VGGNetCNN(input_channels= config['input_channels'], 
+                              num_stacks=config['num_stacks'])
         elif config['model_name'] == "model1":
             model = PersModelCNN(input_channels= config['input_channels'],
+                                 num_stacks=config['num_stacks'],
             num_features=config['num_features'])
         elif config['model_name'] == "model2":
             model = SecondModelCNN(input_channels= config['input_channels'],
@@ -606,7 +613,7 @@ def test(user_ind, model = None):
     
 
     
-    return np.mean(accuracy_results)
+    return accuracy_results, np.mean(accuracy_results)
 
 
 
@@ -617,7 +624,7 @@ if __name__ == "__main__":
         
 
         'root_dir': "/content/drive/MyDrive/DeepLearningFallDetection/data",
-        'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2/LeakyReLu-200-Step-Adam-2Blocks-100Feat",  # Directory specific to the model being tested
+        'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2-AddActivation/DomainAdaptation/2d-4stack",  # Directory specific to the model being tested
         
         
         # CNN Training parameters
@@ -630,16 +637,16 @@ if __name__ == "__main__":
         'lr_decay_gamma': 0.5,           
         'validation_interval': 5,        
         'input_channels'   : 2,
-        'test_ratio' : 0.1,
+        'test_ratio' : 0,
         'val_ratio': 0,
         'window_size' : 50,
-        'num_features': 100,             
-        'num_blocks': 2,      
+        'num_features': 50,             
+        'num_blocks': 0,      
         'test_type' : "individual", 
-        'normalize' : False,       
+        'normalize' : True,       
         'include_attention': False,
         'user_num' : [1,2,3,4,5],
-        'model_name': "model2",
+        'model_name': "model22d",
         'num_folds' : 10,
         'num_stacks': 2,
 

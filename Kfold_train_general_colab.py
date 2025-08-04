@@ -9,13 +9,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
+
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
-
-
 base_path = "/content/drive/MyDrive/DeepLearningFallDetection"
 
 sys.path.append(base_path)
+
 
 subfolders = [
     "CNN_Models/AlexNet",
@@ -32,8 +32,6 @@ for folder in subfolders:
     sys.path.append(full_path)
 
 sys.path.append('/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model3')
-
-
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -47,9 +45,9 @@ from AlexNet import AlexNetCNN
 from VGGNet import VGGNetCNN
 from Test_CNN import TestCNN
 from Model1 import PersModelCNN
+from ModifiedAlex import ModAlexNetCNN
 from Model2 import SecondModelCNN
 from Model3 import Model3CNN
-from ModifiedAlex import ModAlexNetCNN
 from Model2Conv2d import SecondModelCNN2d
 # from LSTMModel import LSTM_Model
 from sklearn.model_selection import KFold
@@ -82,31 +80,30 @@ def train(config):
     os.makedirs(config['save_dir'], exist_ok=True)
     os.makedirs(os.path.join(config['save_dir'], config['checkpoint_dir']), exist_ok=True)
     os.makedirs(os.path.join(config['save_dir'], config['best_dir']), exist_ok=True)
+    print("Created Paths")
 
 
-    # make dataset
 
-    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'],num_stacks= config['num_stacks'], input_channels=config['input_channels'], user_num= config['user_num'], mode ="train", test_type = config['test_type'])
-
-    
-    #Define K-Folds Setup
-
-    kf = KFold(n_splits=config['num_folds'], shuffle=True, random_state=42)
-
-
-    fold_results = np.zeros(config['num_folds'])
-
-            
+        
     wandb.config = {
         "folds":  config['num_folds'],
+        "users":  len(config['user_num']),
         "epochs": config["num_epochs"],
         "batch_size": config['batch_size'],
         "learning_rate": config["learning_rate"],
         "loss_function": "Cross Entropy Loss",
     }
 
-    fig, ax = plt.subplots(4,5, figsize=(12, 8), sharex='col', sharey='row')
+    fig, ax = plt.subplots(4,5, figsize = (12,8), sharex='col', sharey= 'row')
+    train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'], num_stacks= config['num_stacks'], user_num= config['user_num'], mode ="train", test_type = config['test_type'])
+
+    
+    #Define K-Folds Setup
+
+    kf = KFold(n_splits=config['num_folds'], shuffle=True, random_state=42)
+
     cpu_results = np.zeros(config['num_folds'])
+    fold_results = np.zeros(config['num_folds'])
     for fold, (train_idx, val_idx) in enumerate(kf.split(train_dataset)):
         print(f"\nFOLD {fold+1}/{config['num_folds']}")
 
@@ -135,27 +132,27 @@ def train(config):
             model = AlexNetCNN(input_channels= config['input_channels'])
         elif config['model_name'] == "modalex":
             model = ModAlexNetCNN(input_channels= config['input_channels'],
-                                  num_blocks = config['num_blocks'], 
-                                  include_attention = config['include_attention'])
+                                num_blocks = config['num_blocks'], 
+                                include_attention = config['include_attention'])
 
         elif config['model_name'] == "vgg":
             model = VGGNetCNN(input_channels= config['input_channels'])
         elif config['model_name'] == "model1":
             model = PersModelCNN(input_channels= config['input_channels'],
-                                 num_stacks=config['num_stacks'],
+                                    num_stacks=config['num_stacks'],
                 num_features=config['num_features'],
                 include_attention=config['include_attention']
             )
         elif config['model_name'] == "model2":
             model = SecondModelCNN(input_channels= config['input_channels'],
-             num_stack = config['num_stacks'],
+                                    num_stack= config['num_stacks'],
                 num_features=config['num_features'], 
                 num_blocks=config['num_blocks'],
                 include_attention=config['include_attention']
             )
         elif config['model_name'] == "model22d":
             model = SecondModelCNN2d(input_channels= config['input_channels'],
-                                   num_stack=config['num_stacks'],
+                                num_stack=config['num_stacks'],
                 num_features=config['num_features'], 
                 num_blocks=config['num_blocks'],
                 include_attention=config['include_attention']
@@ -168,33 +165,38 @@ def train(config):
         elif config['model_name'] == "model3":
             model = Model3CNN(input_channels= config['input_channels'],
                 num_features=config['num_features'],
-                include_attention=config['include_attention']
-            )
+                include_attention=config['include_attention'])
+        # optimizer = optim.AdamW(
+        #     model.parameters(),
+        #     lr=config['learning_rate'],
+        #     weight_decay=1e-2
+        # )
 
-        model = model.to(device)
-        
-        learnable_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"Learnable Parameters: {learnable_parameters}")
         optimizer = optim.Adam(
             model.parameters(),
             lr=config['learning_rate'],
             betas=(0.9, 0.999)
         )
 
-        
-        scheduler = optim.lr_scheduler.StepLR(
-            optimizer,
-            step_size=config['lr_decay_step'],
-            gamma=config['lr_decay_gamma']
-        )
 
-        loss_fn = nn.CrossEntropyLoss()
+
+
+        model = model.to(device)
+
+
+        learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size = config['lr_decay_step'], gamma = config['lr_decay_gamma'])
+        #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['num_epochs'], eta_min=1e-6)
+
+        loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
     
         train_losses = []
         best_accuracy = 0
 
         latency_vals = []
         throughput_vals = []
+
 
         process = psutil.Process()
         cpu_start = process.cpu_percent()
@@ -205,7 +207,6 @@ def train(config):
             
             correct = 0.0
             total = 0.0
-
         
             train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config['num_epochs']}")
             #For each batch
@@ -228,16 +229,16 @@ def train(config):
                 output = model(data_sample)
                 end = time.time()
 
-
                 latency = (end - start)/config['batch_size']
                 throughput = config['batch_size']/((end - start) + (1e-5))
                 latency_vals.append(latency)
                 throughput_vals.append(throughput)
                 output_labels = torch.argmax(output, dim = 1)
+            
 
-                #Not necessary to extact the class labels from the output, the loss function does it 
+
                 loss =  loss_fn(output, class_label)
-                 
+                
                 
                 loss.backward()
                 optimizer.step()
@@ -247,15 +248,14 @@ def train(config):
                 train_pbar.set_postfix({"loss": f"{loss.item():.4f}"})
                 total += class_label.size(0)
                 correct += (output_labels == class_label).sum().item()
-                
             
+
             train_accuracy = 100 * correct / total
             print(f'Accuracy on the {total} training images: {train_accuracy:.2f}%')
-    
-    
             wandb.log({
-            f"Train Accuracy Fold {fold+1}": train_accuracy,
-            "epoch": epoch + 1})
+                    f"Train Accuracy Fold {fold+1}": train_accuracy,
+                    "epoch": epoch
+                    })
             scheduler.step()
             
         
@@ -272,7 +272,7 @@ def train(config):
             ) or (epoch + 1 == config['num_epochs'])
             
             if should_validate:
-                accuracy = evaluate(val_dataloader, model, fold_num=fold, num_epoch=epoch + 1)
+                accuracy = evaluate(val_dataloader, model, fold_num=fold, num_epoch=epoch)
                 if accuracy >= best_accuracy:
                         fold_results[fold] = accuracy
                         best_accuracy = accuracy
@@ -283,15 +283,13 @@ def train(config):
                             'accuracy': accuracy,
                         }, os.path.join(config['save_dir'], config['best_dir'], f'best_model{fold}.pth'))
 
-                        print(f"Saved best model with accuracy: {accuracy:.2f}")
+                        print(f"Saved best model with accuracy: {accuracy:.2f}, fold: {fold}")
+            
         cpu_end = process.cpu_percent()
-
         cpu_usage = cpu_end - cpu_start
 
 
         print("CPU Usage: ", cpu_usage)
-        cpu_results[fold] = cpu_usage
-
         sum_lat = 0
         sum_thr = 0
         plot_latency = []
@@ -306,16 +304,15 @@ def train(config):
                 plot_through.append(thr_avg)
                 sum_lat = 0
                 sum_thr = 0
-
-    
-        #plot the values 
-
+        
+        
         
         plt.figure(fig.number)
+        cpu_results[fold] = cpu_usage
         if fold >= int(config['num_folds'] / 2):
             ax[2, fold -  int(config['num_folds'] / 2)].plot(range(len(plot_latency)), plot_latency, label = "Latency")
             ax[3, fold -  int(config['num_folds'] / 2)].plot(range(len(plot_through)), plot_through, label = "Throughout", color = "r")
-            ax[2, fold -  int(config['num_folds'] / 2)].set_title(f'Model {fold} CPU: {cpu_usage}%')
+            ax[2, fold -  int(config['num_folds'] / 2)].set_title(f'Model {fold +  1} CPU: {cpu_usage}%')
             ax[2, fold -  int(config['num_folds'] / 2)].legend()
             ax[3, fold -  int(config['num_folds'] / 2)].legend()
             if (fold -  int(config['num_folds'] / 2) == 0):
@@ -328,13 +325,15 @@ def train(config):
             ax[0, fold].legend()
             ax[1, fold].legend()
             if fold == 0:
-                ax[0, fold].set_ylabel("Latency (s/sample)")
-                ax[1, fold].set_ylabel("Throughput (# samples/s)")
+                ax[0, fold].set_ylabel("s/sample")
+                ax[1, fold].set_ylabel("# samples/s")
 
     average_cpu = np.mean(cpu_results)
-    fig.suptitle(f"Latency and Throughout: Parameters {learnable_parameters}")
+
+    
+    fig.suptitle(f"Latency and Throughout: Parameters {learnable_params}")
     fig.supxlabel('Number of Epoch')
-    plt.savefig(os.path.join(config['save_dir'], 'Latency and Throughput Overall'))
+    plt.savefig(os.path.join(config['save_dir'], f'Latency and Throughput'))
     plt.close(fig)
 
     plt.figure()
@@ -343,17 +342,12 @@ def train(config):
     plt.xlabel("Fold Number")
     plt.ylabel("Percentage Accuracy")
     plt.title("Cross-Validation Fold Accuracy for Overall Model")
-    if config['test_type'] == "individual":
-        plt.savefig(os.path.join(config['save_dir'], f"Fold Accuracy User {config['user_num']}"))
-    else:
-        plt.savefig(os.path.join(config['save_dir'], "Fold Accuracy Overall"))
-    plt.clf() 
+    plt.savefig(os.path.join(config['save_dir'], "Fold Accuracy Overall"))
+    plt.close() 
 
-    overall_accuracy = test()
-
-    print(f"Overall Accuracy: {overall_accuracy}")
-    print(f"Overall CPU Usage: {average_cpu}")
-
+    average_accuracy = test()
+    print(f"Test Accuracy for Each User: All: {average_accuracy/100}, Avg: {np.mean(average_accuracy)/100}")
+    print(f"CPU Usage for Each User All: {average_cpu}, Avg: {np.mean(average_cpu)}")
 
             
 
@@ -372,9 +366,9 @@ def evaluate(data_loader, model, fold_num, num_epoch):
     """
     # Set model to evaluation mode
 
+    print("Validating")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
-    print("Validating")
     model.eval()
     
     correct = 0.0
@@ -409,7 +403,7 @@ def evaluate(data_loader, model, fold_num, num_epoch):
     return accuracy
 
 
-def test(user_ind = None, model = None):
+def test(model = None):
     """
     Evaluate the Siamese network
     
@@ -422,12 +416,12 @@ def test(user_ind = None, model = None):
     """
     # Set Model
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
     if model is None:
         if config['model_name'] == "resnet":
-            model = TestCNN(include_attention= config['include_attention'],input_channels= config['input_channels'],
-                num_blocks=config['num_blocks'],
-                num_features=config['num_features'])
+            model = TestCNN(include_attention= config['include_attention'], 
+                            input_channels= config['input_channels'],
+                            num_blocks=config['num_blocks'],
+                            num_features=config['num_features'])
         elif config['model_name'] == "alex":
             model = AlexNetCNN(input_channels= config['input_channels'])
         elif config['model_name'] == "modalex":
@@ -438,11 +432,11 @@ def test(user_ind = None, model = None):
             model = VGGNetCNN(input_channels= config['input_channels'])
         elif config['model_name'] == "model1":
             model = PersModelCNN(input_channels= config['input_channels'],
-                                  num_stacks=config['num_stacks'],
+                                 num_stacks=config['num_stacks'],
             num_features=config['num_features'])
         elif config['model_name'] == "model2":
             model = SecondModelCNN(input_channels= config['input_channels'],
-                                    num_stack = config['num_stacks'],
+                                   num_stack= config['num_stacks'],
             num_features=config['num_features'],
             num_blocks=config['num_blocks'],
             include_attention=config['include_attention'])
@@ -464,10 +458,12 @@ def test(user_ind = None, model = None):
                 include_attention=config['include_attention']
             )
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
+
     #Make dataset and dataloader 
 
-    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'], user_num= config['user_num'], num_stacks= config['num_stacks'], mode ="test", test_type = config['test_type'])
+    test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], num_stacks= config['num_stacks'], input_channels=config['input_channels'], user_num= config['user_num'], mode ="test", test_type = config['test_type'])
 
     test_dataloader = torch.utils.data.DataLoader(dataset=test_dataset,
                                             batch_size=config["batch_size"],
@@ -476,15 +472,20 @@ def test(user_ind = None, model = None):
 
     fig_prec, axes_prec = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')  
     fig_conf, axes_conf = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')
-
     accuracy_results = np.zeros(config['num_folds'])
     for j in range(config['num_folds']):
-        checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth'))
+
+        if os.path.exists(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth')):
+           checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth'))
+        else:
+            continue
+        
 
 
         model.load_state_dict(checkpoint['model_state_dict'])
-        learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"Loaded model from {config['best_dir']}, Parameter: {learnable_params}")
+
+
+        print(f"Loaded model from {config['best_dir']}")
 
         print("Testing")
         model.eval()
@@ -502,6 +503,7 @@ def test(user_ind = None, model = None):
             for data_samples in test_pbar:
                 data_samples["data_sample"] = data_samples["data_sample"].to(device)
                 data_samples["class_label"] = data_samples["class_label"] .to(device)
+
                 
                 
                 data = data_samples["data_sample"]
@@ -530,7 +532,6 @@ def test(user_ind = None, model = None):
         # calculate accuracy
         accuracy = 100 * correct / total
         accuracy_results[j] = accuracy
-
     
         precision_list = []
         recall_list = []
@@ -552,21 +553,11 @@ def test(user_ind = None, model = None):
         if j >= int(config['num_folds'] / 2):
             axes_prec[1, j - (int(config['num_folds'] / 2))].plot(locations, precision_list, label = "Precision")
             axes_prec[1, j - (int(config['num_folds'] / 2))].plot(locations, recall_list, label = "Recall")
-            # for i, txt in enumerate(precision_list):
-            #     axes_prec[1, j - (int(config['num_folds'] / 2))].text(locations[i], precision_list[i], f'{txt:.2f}%')
-
-            # for i, txt in enumerate(recall_list):
-            #     axes_prec[1, j - (int(config['num_folds'] / 2))].text(locations[i], recall_list[i], f'{txt:.2f}%')
             axes_prec[1, j - (int(config['num_folds'] / 2))].set_title(f'Model {j} {accuracy:.2f}%')
             axes_prec[1, j - (int(config['num_folds'] / 2))].legend()
         else:
             axes_prec[0, j].plot(locations, precision_list, label = "Precision")
             axes_prec[0, j].plot(locations, recall_list, label = "Recall")
-            # for i, txt in enumerate(precision_list):
-            #     axes_prec[0, j].text(locations[i], precision_list[i], f'{txt:.2f}%')
-
-            # for i, txt in enumerate(recall_list):
-            #     axes_prec[0, j].text(locations[i], recall_list[i], f'{txt:.2f}%')
             axes_prec[0,j].set_title(f'Model {j} {accuracy:.2f}%')
             axes_prec[0, j].legend()
       
@@ -586,11 +577,10 @@ def test(user_ind = None, model = None):
     fig_prec.supxlabel("Class Label")
     fig_prec.supylabel("Percentage")
 
-    fig_prec.suptitle(f"Precision and Recall Curve for Each Class: Attention: {config['include_attention']}")
-    if config['test_type'] == "individual":
-        fig_prec.savefig(os.path.join(config['save_dir'], f"Precision_Recall (K-Fold) User {config['user_num']}"))
-    else:
-        fig_prec.savefig(os.path.join(config['save_dir'], "Precision_Recall (K-Fold) Overall"))
+    fig_prec.suptitle(f"Precision and Recall Curve for Each Class Attention: {config['include_attention']}")
+
+
+    fig_prec.savefig(os.path.join(config['save_dir'], "Precision_Recall (K-Fold) Overall"))
    
     plt.close(fig_prec)
 
@@ -599,13 +589,11 @@ def test(user_ind = None, model = None):
 
     fig_conf.suptitle("Confusion Matrix")
     plt.figure(fig_conf.number)
-    if config['test_type'] == "individual":
-        fig_conf.savefig(os.path.join(config['save_dir'], f"Confusion_Matrix (K-Fold) User {config['user_num']}"))
-    else:
-        fig_conf.savefig(os.path.join(config['save_dir'], "Confusion_Matrix (K-Fold) Overall"))
+
+
+    fig_conf.savefig(os.path.join(config['save_dir'], "Confusion_Matrix (K-Fold) Overall"))
 
     plt.close(fig_conf)
-
     
 
     
@@ -620,7 +608,7 @@ if __name__ == "__main__":
         
 
         'root_dir': "/content/drive/MyDrive/DeepLearningFallDetection/data",
-        'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2/TestGeneral",  # Directory specific to the model being tested
+        'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2-AddActivation/DomainAdaptation/2d-4stack",  # Directory specific to the model being tested
         
         
         # CNN Training parameters
@@ -633,18 +621,20 @@ if __name__ == "__main__":
         'lr_decay_gamma': 0.5,           
         'validation_interval': 5,        
         'input_channels'   : 2,
-        'test_ratio' : 0.1,
+        'test_ratio' : 0,
         'val_ratio': 0,
         'window_size' : 50,
         'num_features': 50,             
-        'num_blocks': 2,      
-        'test_type' : "normal", 
-        'normalize' : False,       
+        'num_blocks': 0,      
+        'test_type' : "user", 
+        'normalize' : True,       
         'include_attention': False,
-        'model_name': "model22d",
-        'num_folds' : 10,
         'user_num' : [1,2,3,4,5],
+        'model_name': "alex",
+        'num_folds' : 10,
         'num_stacks': 2,
+
+        
         
 
         # LSTM Training parameters
@@ -658,9 +648,6 @@ if __name__ == "__main__":
         'save_every': 5,                 # Save checkpoint every N epochs
         'resume': None,                  # Path to checkpoint to resume from
     }
-
-
-    
     
 
     if config['run_type'] == 'test':
