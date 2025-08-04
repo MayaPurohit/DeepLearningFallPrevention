@@ -45,6 +45,7 @@ class MotionDataset(Dataset):
 
         if test_type == "normal" or test_type == "individual" or test_type == "olivia" or test_type == "maya":
 
+            self.all_labels = []
             if test_type == "normal":
                 self.full_dataset = self.create_dataset_normal()
             elif test_type == "individual":
@@ -75,9 +76,15 @@ class MotionDataset(Dataset):
             self.train_data = self.full_dataset[train_ind]
             self.val_data = self.full_dataset[val_ind]
 
+            for g in range(len(self.train_data)):
+                self.all_labels.append(self.train_data[g]["class_label"])
+
         elif test_type == "user":
             self.full_dataset, self.test_data = self.create_dataset_user()
-        
+            self.all_labels = []
+            
+
+
             indices = np.arange(len(self.full_dataset))
             np.random.shuffle(indices)
 
@@ -96,10 +103,6 @@ class MotionDataset(Dataset):
             self.test_data = self.test_data[test_indices]
             self.train_data = self.full_dataset[train_ind]
             self.val_data = self.full_dataset[val_ind]
-        elif test_type == 'both':
-            self.train_data, self.test_data, self.val_data = self.create_dataset_both()
-        elif test_type == "olivia":
-            self.train_data, self.test_data = self.create_dataset_olivia()
 
 
 
@@ -128,7 +131,14 @@ class MotionDataset(Dataset):
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
 
                 normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+                normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
+
+                
+                if self.normalize == True:
+                    df['Composed_Acceleration'] = normalized_acceleration
+                    df['Composed_Gyroscope'] = normalized_gyroscope
+
 
                 for idx in peaks:
                     data_pack = {}
@@ -139,7 +149,12 @@ class MotionDataset(Dataset):
                             data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
-                        data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+
+                        data_sample = data_sample.to_numpy()
+                        columns_to_copy = data_sample.copy()
+                        for m in range(self.num_stacks -1):
+                            data_sample = np.hstack([data_sample, columns_to_copy])
+                        data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
                         data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
                         dataset.append(data_pack)
 
@@ -155,7 +170,13 @@ class MotionDataset(Dataset):
             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
             
             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+            normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
+
+
+            if self.normalize == True:
+                df['Composed_Acceleration'] = normalized_acceleration
+                df['Composed_Gyroscope'] = normalized_gyroscope
 
             for idx in peaks:
                 data_pack = {}
@@ -164,9 +185,12 @@ class MotionDataset(Dataset):
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
                     else:
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
-                    if self.normalize:
-                        data_sample[:] = self.scaler.fit_transform(data_sample)
-                    data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+                    
+                    data_sample = data_sample.to_numpy()
+                    columns_to_copy = data_sample.copy()
+                    for m in range(self.num_stacks -1):
+                        data_sample = np.hstack([data_sample, columns_to_copy])
+                    data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
                     test_dataset.append(data_pack)
 
@@ -182,37 +206,38 @@ class MotionDataset(Dataset):
         dataset = []
         for i in range(len(PersonList)):
             for j in range(len(ActivityList)):
-                
-                df = df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
+            
+                df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
                 normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
-
                 normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
-
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
+
+                if self.normalize == True:
+                    df['Composed_Acceleration'] = normalized_acceleration
+                    df['Composed_Gyroscope'] = normalized_gyroscope
                 
-                df['Composed_Acceleration'] = normalized_acceleration
-                df['Composed_Gyroscope'] = normalized_gyroscope
                 for idx in peaks:
                     data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
                         if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2-1)): idx + (self.window_size//2+1), 11:]
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
+                            #np.savetxt(f"C:\\Users\\mayam\\DeepLearningFallDetection\\SavedData\\User1_{ActivityList[j]}_Normal_{i+1}.dat", data_sample, delimiter=',')
                         else:
-                            data_sample = df.iloc[idx - ((self.window_size//2-1)): idx + (self.window_size//2 +1), 1:7]
-                        if self.normalize:
-                            data_sample[:] = self.scaler.fit_transform(data_sample)
+                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
+
                         
                         data_sample = data_sample.to_numpy()
                         columns_to_copy = data_sample.copy()
-                        for i in range(self.num_stacks -1):
+                        for m in range(self.num_stacks -1):
                             data_sample = np.hstack([data_sample, columns_to_copy])
+                        
+                        data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
                         data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
 
-                        data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
                         
                         dataset.append(data_pack)
 
@@ -222,78 +247,79 @@ class MotionDataset(Dataset):
 
 
     # 3 users in train, 1 user in val, and the last user in test 
-    def create_dataset_both(self):
-        ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
-        PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
+    # def create_dataset_both(self):
+    #     ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
+    #     PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
 
         
         
-        removed_person_test = PersonList[self.index_to_remove_test]
+    #     removed_person_test = PersonList[self.index_to_remove_test]
         
-        removed_person_val = PersonList[self.index_to_remove_val]
-        removed_people = [removed_person_test, removed_person_val]
-        del PersonList[self.index_to_remove_test]
-        del PersonList[self.index_to_remove_val]
+    #     removed_person_val = PersonList[self.index_to_remove_val]
+    #     removed_people = [removed_person_test, removed_person_val]
+    #     del PersonList[self.index_to_remove_test]
+    #     del PersonList[self.index_to_remove_val]
 
-        dataset = []
-        for i in range(len(PersonList)):
-            for j in range(len(ActivityList)):
+    #     dataset = []
+    #     for i in range(len(PersonList)):
+    #         for j in range(len(ActivityList)):
                 
-                df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
-                df = df[1:].astype('float64')
+    #             df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
+    #             df = df[1:].astype('float64')
             
-                df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
-                df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
+    #             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
+    #             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
                 
-                normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
-                peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
+    #             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+    #             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
-                for idx in peaks:
-                    data_pack = {}
-                    if (idx - ((self.window_size//2)-1)) > 0:
-                        if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
-                        else:
-                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
-                        if self.normalize:
-                            data_sample[:] = self.scaler.fit_transform(data_sample)
-                        data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
-                        data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
-                        dataset.append(data_pack)
+    #             for idx in peaks:
+    #                 data_pack = {}
+    #                 if (idx - ((self.window_size//2)-1)) > 0:
+    #                     if self.input_channels == 2:
+    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
+    #                     else:
+    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
+    #                     if self.normalize:
+    #                         data_sample[:] = self.scaler.fit_transform(data_sample)
+    #                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+    #                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+    #                     dataset.append(data_pack)
 
-        dataset = np.array(dataset)
+    #     dataset = np.array(dataset)
 
-        test_val_set = [[], []]
-        for i in range(len(removed_people)):
-            for j in range(len(ActivityList)):
+    #     test_val_set = [[], []]
+    #     for i in range(len(removed_people)):
+    #         for j in range(len(ActivityList)):
                
-                df = pd.read_csv(self.root_dir + fr"/{removed_people[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
-                df = df[1:].astype('float64')
+    #             df = pd.read_csv(self.root_dir + fr"/{removed_people[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
+    #             df = df[1:].astype('float64')
             
-                df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
-                df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
+    #             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
+    #             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
                 
-                normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
-                peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
+    #             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
+    #             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
-                for idx in peaks:
-                    data_pack = {}
-                    if (idx - ((self.window_size//2)-1)) > 0:
-                        if self.input_channels == 2:
-                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
-                        else:
-                            data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
-                        if self.normalize:
-                            data_sample[:] = self.scaler.fit_transform(data_sample)
-
-                        data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
-                        data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
-                        test_val_set[i].append(data_pack)
-
-            test_val_set[i] = np.array(test_val_set[i])
+  
+    #             for idx in peaks:
+    #                 data_pack = {}
+    #                 if (idx - ((self.window_size//2)-1)) > 0:
+    #                     if self.input_channels == 2:
+    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
+    #                     else:
+    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
 
 
-        return dataset, test_val_set[0], test_val_set[1]
+    #                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
+
+    #                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
+    #                     test_val_set[i].append(data_pack)
+
+    #         test_val_set[i] = np.array(test_val_set[i])
+
+
+    #     return dataset, test_val_set[0], test_val_set[1]
     
     # Dataset for only one user 
     def create_dataset_individual(self):
@@ -314,8 +340,10 @@ class MotionDataset(Dataset):
             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
 
-            df['Composed_Acceleration'] = normalized_acceleration
-            df['Composed_Gyroscope'] = normalized_gyroscope
+            if self.normalize == True:
+                df['Composed_Acceleration'] = normalized_acceleration
+                df['Composed_Gyroscope'] = normalized_gyroscope
+            
             for idx in peaks:
                 data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
@@ -324,12 +352,11 @@ class MotionDataset(Dataset):
                         #np.savetxt(f"C:\\Users\\mayam\\DeepLearningFallDetection\\SavedData\\User1_{ActivityList[j]}_Normal_{i+1}.dat", data_sample, delimiter=',')
                     else:
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
-                    if self.normalize:
-                        data_sample[:] = self.scaler.fit_transform(data_sample)
+
                     
                     data_sample = data_sample.to_numpy()
                     columns_to_copy = data_sample.copy()
-                    for i in range(self.num_stacks -1):
+                    for n in range(self.num_stacks -1):
                         data_sample = np.hstack([data_sample, columns_to_copy])
 
                     data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
