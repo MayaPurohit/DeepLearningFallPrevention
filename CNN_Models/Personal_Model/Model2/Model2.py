@@ -86,19 +86,10 @@ class SecondModelCNN(nn.Module):
 
         self.block3 = ResidualBlock(num_features*4)
 
-
-
-
-        # blocks = []
-        # for i in range(num_blocks):
-        #     block = ResidualBlock(num_features*4)
-        #     blocks.append(block)
-
-        # self.blocks = nn.Sequential(*blocks)
-
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.fc_layer = nn.Linear(num_features*4, num_features*4)
         self.fc_bn = nn.LayerNorm(num_features*4)
+        self.final_relu = nn.LeakyReLU(negative_slope=1e-2)
         self.dropout =  nn.Dropout1d(0.4)
         self.fc_layer2 = nn.Linear(num_features*4, num_classes)
        
@@ -143,6 +134,7 @@ class SecondModelCNN(nn.Module):
        
         x = self.fc_layer(x)
         x = self.fc_bn(x)
+        x = self.final_relu(x)
         x = self.dropout(x)
         x = self.fc_layer2(x)
         return x
