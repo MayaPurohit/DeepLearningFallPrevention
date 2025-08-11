@@ -1,7 +1,7 @@
 # Maya Purohit
-#4/19/2025
+#6/19/2025
 # Dataloader.py
-# Develop a dataloader to get data models for the SRCNN
+# Develop a dataloader to make data samples to train Surface Classification CNN model
 
 import os
 import random
@@ -19,7 +19,14 @@ from sklearn import svm
 
 
 
-# Allow loading of truncated images
+
+'''Types of Data Setups
+    # create_dataset_user: create training set with 4 users and create testing set with the remaining user 
+    # create_dataset_normal: create training, validation, and testing set with all 5 users depending on the ratio defined above
+    # create_dataset_individual: create training, validation, and testing set with data from one individual user with the ratio and user defined above
+    # create_dataset_olivia and create_dataset_maya: read in data that is generated from txt or npy files 
+'''
+
 
 
 class MotionDataset(Dataset):
@@ -115,13 +122,6 @@ class MotionDataset(Dataset):
 
 
 
-    '''Types of Data Setups
-        # create_dataset_user: create training set with 4 users and create testing set with the remaining user 
-        # create_dataset_normal: create training, validation, and testing set with all 5 users depending on the ratio defined above
-        # create_dataset_individual: create training, validation, and testing set with data from one individual user with the ratio and user defined above
-        # create_dataset_olivia and create_dataset_maya: read in data that is generated from txt or npy files 
-    '''
-
 
 
 
@@ -185,18 +185,23 @@ class MotionDataset(Dataset):
             df = pd.read_csv(self.root_dir + fr"/{removed_person}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
             df = df[1:].astype('float64')
         
+            #compose three-axis data
             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
             
+
+            #normalize data and detect peaks from normalized data
             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
             normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
 
+            #if true, use normalized data rather than raw
             if self.normalize == True:
                 df['Composed_Acceleration'] = normalized_acceleration
                 df['Composed_Gyroscope'] = normalized_gyroscope
 
+            #from detected peaks, create data samples as dictionaries
             for idx in peaks:
                 data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
@@ -205,6 +210,7 @@ class MotionDataset(Dataset):
                     else:
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
                     
+                    #stack data to specified size 
                     data_sample = data_sample.to_numpy()
                     columns_to_copy = data_sample.copy()
                     for m in range(self.num_stacks -1):

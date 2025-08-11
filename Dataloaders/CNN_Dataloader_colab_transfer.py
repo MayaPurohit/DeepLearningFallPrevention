@@ -1,7 +1,7 @@
 # Maya Purohit
 #4/19/2025
 # Dataloader.py
-# Develop a dataloader to get data models for the SRCNN
+# Develop a dataloader to train CNN models for surface detection using transfer learning mechanism 
 
 import os
 import random
@@ -19,6 +19,13 @@ from sklearn import svm
 
 
 
+
+'''Types of Data Setups
+    # create_dataset_user: create training set with 4 users and create testing set with the remaining user 
+    # create_dataset_normal: create training, validation, and testing set with all 5 users depending on the ratio defined above
+    # create_dataset_individual: create training, validation, and testing set with data from one individual user with the ratio and user defined above
+    # create_dataset_olivia and create_dataset_maya: read in data that is generated from txt or npy files 
+'''
 
 
 class MotionDataset(Dataset):
@@ -42,6 +49,8 @@ class MotionDataset(Dataset):
         random.seed(seed)
         np.random.seed(seed)
 
+
+        #Create general four user and one user dataset
         self.four_users, self.one_user = self.create_dataset_user()
         self.four_separate_indices = np.arange(len(self.four_users))
         np.random.shuffle(self.four_separate_indices)
@@ -49,6 +58,7 @@ class MotionDataset(Dataset):
     
         four_total_len = len(self.four_separate_indices)
 
+        # define ratios
         four_val_size = int((self.val_ratio)*four_total_len)
         four_test_size = int(self.test_ratio * four_total_len)
         four_train_size = four_total_len - (four_val_size + four_test_size)
@@ -109,12 +119,12 @@ class MotionDataset(Dataset):
 
 
 
-            #Make datasets based on their indices 
+            #Make datasets based on their indices from the one user set 
             train_ind = self.one_separate_indices[:one_train_size]
             val_ind = self.one_separate_indices[one_train_size:one_train_size + one_val_size]
 
 
-
+            #define the three sets
             self.test_data = self.one_user[self.test_ind]
             self.train_data = self.one_user[train_ind]
             self.val_data = self.one_user[val_ind]
@@ -124,27 +134,28 @@ class MotionDataset(Dataset):
         elif test_type == "user":
 
 
-
+            #make training and valifation set from the four user dataset
             train_ind = self.four_separate_indices[:four_train_size]
             val_ind = self.four_separate_indices[four_train_size:four_train_size + four_val_size]
 
 
+            #define test set from one user 
             self.test_data = self.one_user[self.one_separate_indices]
             self.train_data = self.four_users[train_ind]
             self.val_data = self.four_users[val_ind]
 
         elif test_type == "normal_user":
 
-            # Four Users 
+            # Four Users -- all data not included in training or validation
             four_test_ind = self.four_separate_indices[four_train_size + four_val_size: ]
             four_user_test = self.four_users[four_test_ind]
 
 
 
-            #Final Individual User
+            #Final Individual User -- all data not included in training or validation
             individual_test = self.one_user[self.test_ind]
 
-
+            #make only testing set 
             self.test_data = np.concatenate((four_user_test, individual_test))
             test_indices = np.arange(len(self.test_data))
             self.test_data = self.test_data[test_indices]
@@ -233,6 +244,7 @@ class MotionDataset(Dataset):
                 df['Composed_Acceleration'] = normalized_acceleration
                 df['Composed_Gyroscope'] = normalized_gyroscope
 
+            #make dataset from identified peaks 
             for idx in peaks:
                 data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
@@ -335,6 +347,7 @@ class MotionDataset(Dataset):
                 df['Composed_Acceleration'] = normalized_acceleration
                 df['Composed_Gyroscope'] = normalized_gyroscope
             
+            #create data samples around detected peaks of size window size
             for idx in peaks:
                 data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
