@@ -33,15 +33,17 @@ class MotionDataset(Dataset):
         self.window_size = window_size
         self.mode = mode
         self.index_to_remove_test = 1
-        self.index_to_remove_val = 2
         self.normalize = normalize
         self.input_channels = input_channels
         self.user_num = user_num
         self.num_stacks = num_stacks
-        self.scaler = MinMaxScaler()
 
+
+        #ensure that data is not overlapping by setting seed
         random.seed(seed)
         np.random.seed(seed)
+
+        #define dataset by the type specified 
 
         if test_type == "normal" or test_type == "individual" or test_type == "olivia" or test_type == "maya":
 
@@ -59,7 +61,7 @@ class MotionDataset(Dataset):
             np.random.shuffle(indices)
 
 
-
+            #use the defined ratios to separate dataset into test, validation, and test sets
             total_len = len(indices)
 
             val_size = int(self.val_ratio * total_len)
@@ -67,19 +69,25 @@ class MotionDataset(Dataset):
             train_size = total_len - (val_size + test_size)
 
 
+            #take the indices up to the defined ratios
             train_ind = indices[:train_size]
             val_ind = indices[train_size:train_size + val_size]
             test_ind = indices[train_size + val_size:]
 
 
+            #define the three different sets for model training 
             self.test_data = self.full_dataset[test_ind]
             self.train_data = self.full_dataset[train_ind]
             self.val_data = self.full_dataset[val_ind]
 
+
+            #for stratified-kfold, record all of the labels for the training data
             for g in range(len(self.train_data)):
                 self.all_labels.append(self.train_data[g]["class_label"])
 
         elif test_type == "user":
+
+            #for four users, create training and validation 
             self.full_dataset, self.test_data = self.create_dataset_user()
             self.all_labels = []
             
@@ -97,6 +105,7 @@ class MotionDataset(Dataset):
             train_ind = indices[:train_size]
             val_ind = indices[train_size:]
 
+            #test set is all of the data from one user shuffled
             test_indices =  np.arange(len(self.test_data))
             np.random.shuffle(test_indices)
 
@@ -106,17 +115,23 @@ class MotionDataset(Dataset):
 
 
 
+    '''Types of Data Setups
+        # create_dataset_user: create training set with 4 users and create testing set with the remaining user 
+        # create_dataset_normal: create training, validation, and testing set with all 5 users depending on the ratio defined above
+        # create_dataset_individual: create training, validation, and testing set with data from one individual user with the ratio and user defined above
+        # create_dataset_olivia and create_dataset_maya: read in data that is generated from txt or npy files 
+    '''
 
 
 
 
-# Dataset with  4 users in train, 5th user in test 
+   # Dataset with  4 users in train, 5th user in test 
     def create_dataset_user(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
 
         
-        
+        #remove person from the training set
         removed_person = PersonList[self.index_to_remove_test]
         
         del PersonList[self.index_to_remove_test]
@@ -127,19 +142,21 @@ class MotionDataset(Dataset):
                 df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
+                #compose the acceleration and gyroscope data
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
 
+                #normalize data 
                 normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
                 normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
-                
+                #if it should be normalized, replace raw data with normalized verisons 
                 if self.normalize == True:
                     df['Composed_Acceleration'] = normalized_acceleration
                     df['Composed_Gyroscope'] = normalized_gyroscope
 
-
+                #create dictionaries with data samples as "data_sample" and "class_label" for each sample around the detected peaks 
                 for idx in peaks:
                     data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
@@ -150,8 +167,10 @@ class MotionDataset(Dataset):
                         if self.normalize:
                             data_sample[:] = self.scaler.fit_transform(data_sample)
 
+                        #for stacking, copy the data sample and use hstack to stack samples 
                         data_sample = data_sample.to_numpy()
                         columns_to_copy = data_sample.copy()
+                        #stack the sample for the given number of times 
                         for m in range(self.num_stacks -1):
                             data_sample = np.hstack([data_sample, columns_to_copy])
                         data_pack["data_sample"] = torch.tensor(data_sample, dtype=torch.float32)
@@ -201,6 +220,8 @@ class MotionDataset(Dataset):
 
     # Dataset with all 5 users (5 users in train, val and test set)
     def create_dataset_normal(self):
+        
+        #include all users 
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
         dataset = []
@@ -210,16 +231,20 @@ class MotionDataset(Dataset):
                 df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
                 df = df[1:].astype('float64')
             
+                #compose and normalize data using z-score normalization 
                 df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
                 df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
                 normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
                 normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
+
+                #normalize data and replace if specified 
                 if self.normalize == True:
                     df['Composed_Acceleration'] = normalized_acceleration
                     df['Composed_Gyroscope'] = normalized_gyroscope
                 
+                #create data samples with dictionaries around indices found in peak detection
                 for idx in peaks:
                     data_pack = {}
                     if (idx - ((self.window_size//2)-1)) > 0:
@@ -230,6 +255,7 @@ class MotionDataset(Dataset):
                             data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
 
                         
+                        #stack data the number of times specified
                         data_sample = data_sample.to_numpy()
                         columns_to_copy = data_sample.copy()
                         for m in range(self.num_stacks -1):
@@ -246,86 +272,13 @@ class MotionDataset(Dataset):
         return dataset
 
 
-    # 3 users in train, 1 user in val, and the last user in test 
-    # def create_dataset_both(self):
-    #     ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
-    #     PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
-
-        
-        
-    #     removed_person_test = PersonList[self.index_to_remove_test]
-        
-    #     removed_person_val = PersonList[self.index_to_remove_val]
-    #     removed_people = [removed_person_test, removed_person_val]
-    #     del PersonList[self.index_to_remove_test]
-    #     del PersonList[self.index_to_remove_val]
-
-    #     dataset = []
-    #     for i in range(len(PersonList)):
-    #         for j in range(len(ActivityList)):
-                
-    #             df = pd.read_csv(self.root_dir + fr"/{PersonList[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
-    #             df = df[1:].astype('float64')
-            
-    #             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
-    #             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                
-    #             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
-    #             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
-
-    #             for idx in peaks:
-    #                 data_pack = {}
-    #                 if (idx - ((self.window_size//2)-1)) > 0:
-    #                     if self.input_channels == 2:
-    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
-    #                     else:
-    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
-    #                     if self.normalize:
-    #                         data_sample[:] = self.scaler.fit_transform(data_sample)
-    #                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
-    #                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
-    #                     dataset.append(data_pack)
-
-    #     dataset = np.array(dataset)
-
-    #     test_val_set = [[], []]
-    #     for i in range(len(removed_people)):
-    #         for j in range(len(ActivityList)):
-               
-    #             df = pd.read_csv(self.root_dir + fr"/{removed_people[i]}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
-    #             df = df[1:].astype('float64')
-            
-    #             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
-    #             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
-                
-    #             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
-    #             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
-
-  
-    #             for idx in peaks:
-    #                 data_pack = {}
-    #                 if (idx - ((self.window_size//2)-1)) > 0:
-    #                     if self.input_channels == 2:
-    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 11:]
-    #                     else:
-    #                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
-
-
-    #                     data_pack["data_sample"] = torch.tensor(data_sample.to_numpy(), dtype=torch.float32)
-
-    #                     data_pack["class_label"] = torch.tensor(j, dtype=torch.long)
-    #                     test_val_set[i].append(data_pack)
-
-    #         test_val_set[i] = np.array(test_val_set[i])
-
-
-    #     return dataset, test_val_set[0], test_val_set[1]
     
     # Dataset for only one user 
     def create_dataset_individual(self):
         ActivityList = ['LocationA', 'LocationB', 'LocationC', 'LocationD', 'LocationE']
         PersonList = ['User1', 'User2', 'User3', 'User4', 'User5']
 
+        #only create the dataset for the chosen individual 
         chosen_ind = PersonList[self.user_num - 1]
         dataset = []
         for j in range(len(ActivityList)):
@@ -333,6 +286,7 @@ class MotionDataset(Dataset):
             df = pd.read_csv(self.root_dir + fr"/{chosen_ind}_{ActivityList[j]}_Normal.csv", sep = "\t", header = 1)
             df = df[1:].astype('float64')
         
+            #compose and normalize data 
             df['Composed_Acceleration'] = np.sqrt(df['Shimmer_8665_Accel_LN_X_CAL']**2 + df['Shimmer_8665_Accel_LN_Y_CAL']**2 + df['Shimmer_8665_Accel_LN_Z_CAL']**2)
             df['Composed_Gyroscope'] = np.sqrt(np.power(df['Shimmer_8665_Gyro_X_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Y_CAL'], 2) + np.power(df['Shimmer_8665_Gyro_Z_CAL'], 2))
             normalized_acceleration = (df['Composed_Acceleration'] - df['Composed_Acceleration'].mean())/ (df['Composed_Acceleration'].std())
@@ -340,10 +294,13 @@ class MotionDataset(Dataset):
             peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
 
+            #if true, replace raw data with normalized data
             if self.normalize == True:
                 df['Composed_Acceleration'] = normalized_acceleration
                 df['Composed_Gyroscope'] = normalized_gyroscope
             
+
+            #create data sample dictionaries with specified size and data labels
             for idx in peaks:
                 data_pack = {}
                 if (idx - ((self.window_size//2)-1)) > 0:
@@ -353,6 +310,7 @@ class MotionDataset(Dataset):
                     else:
                         data_sample = df.iloc[idx - ((self.window_size//2)): idx + (self.window_size//2), 1:7]
 
+                    #stack data the specified amount 
                     
                     data_sample = data_sample.to_numpy()
                     columns_to_copy = data_sample.copy()
@@ -418,6 +376,7 @@ class MotionDataset(Dataset):
 
 
 
+    
     def __len__(self):
         if self.mode == "train":
             return len(self.train_data)
@@ -429,6 +388,9 @@ class MotionDataset(Dataset):
     
 
     def __getitem__(self, idx):
+        '''
+        Return the dataset depending on the mode that is defined in the model instance declaratation
+        '''
         if self.mode == "train":
             val = self.train_data[idx]
         elif self.mode == "val":
