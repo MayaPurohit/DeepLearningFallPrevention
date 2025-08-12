@@ -10,14 +10,6 @@ Five different users walk on the following surfaces:
 - Lawn
 
 
-# Necessary packages:
-- python
-- torch
-- numpy
-- pandas
-- sklearn
-- seaborn
-
 # To run:
 python Kfold_train_colab.py
   
