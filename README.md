@@ -73,7 +73,7 @@ Five different users walk on the following surfaces:
             train_colab.py
             transfer_learning_training.py
 ```
-# Dependencies
+# Dependencies and Configuration
 
 - python 3.12.11
 - matplotlib 3.10.0
@@ -85,7 +85,7 @@ Five different users walk on the following surfaces:
 For use in google colab, run `!pip install torch torchvision scikit-learn` to install necessary packages 
 
 # To run:
-python [training file].py
+python ["training file"].py
 
 # Contact Information:
 
@@ -94,5 +94,7 @@ Email: mayamotog1@gmail.com
 # Credit and Acknowledgements
 
 Thank you to Professor Shuangquan Wang, Professor Enyue Lu,  Olivia Fann, and Salisbury University
+
+
 
   
