@@ -13,6 +13,7 @@ Five different users walk on the following surfaces:
 
 # Directory Layout:
 
+```text
 -DeepLearningFallPrevention-main
     |   README.md
     |
@@ -73,6 +74,7 @@ Five different users walk on the following surfaces:
             train.py
             train_colab.py
             transfer_learning_training.py
+```
 # To run:
 
   
