@@ -1,8 +1,8 @@
 
 
 # Maya Purohit
-# AlexNet
-# Develop classes to develop the AlexNet Architecture Model
+# ModifiedAlexNet.py
+# Develop classes to create smaller version of the AlexNet Architecture Model
 
 import torch
 import torch.nn as nn
@@ -47,7 +47,7 @@ class ResidualBlock(nn.Module):
 class ModAlexNetCNN(nn.Module):
     def __init__(self, input_channels=6, num_blocks = 2, include_attention = False, num_classes=5):
         """
-  
+        Reduce size of AlexNet to smaller size 
         """
         super(ModAlexNetCNN, self).__init__()
         
@@ -122,7 +122,9 @@ class ModAlexNetCNN(nn.Module):
         # self.attention = SelfAttention(640)
 
     def _initialize_weights(self):
-
+        '''
+        Initialize weights and biases for each type of layer
+        '''
         for m in self.modules(): #initialize the appropriate weights
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight, mean = 0.0, std = 0.01)
@@ -137,7 +139,9 @@ class ModAlexNetCNN(nn.Module):
         
     def forward(self, x):
         
-       
+        '''
+        Forward pass through the layers 
+        '''
         x = self.first_conv(x)
        
         
