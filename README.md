@@ -9,8 +9,6 @@ Five different users walk on the following surfaces:
 - Brick Road
 - Lawn
 
-
-
 # Directory Layout:
 
 ```text
@@ -75,6 +73,26 @@ Five different users walk on the following surfaces:
             train_colab.py
             transfer_learning_training.py
 ```
+# Dependencies
+
+- python 3.12.11
+- matplotlib 3.10.0
+- numpy 2.0.2
+- pandas 2.2.2
+- pytorch 2.6.0
+- scikit-learn 1.6.1
+
+For use in google colab, run `!pip install torch torchvision scikit-learn` to install necessary packages 
+
 # To run:
+python [training file].py
+
+# Contact Information:
+
+Email: mayamotog1@gmail.com
+
+# Credit and Acknowledgements
+
+Thank you to Professor Shuangquan Wang, Professor Enyue Lu,  Olivia Fann, and Salisbury University
 
   
