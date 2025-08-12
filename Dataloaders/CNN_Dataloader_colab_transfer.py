@@ -1,6 +1,6 @@
 # Maya Purohit
-#4/19/2025
-# Dataloader.py
+#6/19/2025
+# CNN_Dataloader_colab_transfer.py
 # Develop a dataloader to train CNN models for surface detection using transfer learning mechanism 
 
 import os
@@ -289,7 +289,7 @@ class MotionDataset(Dataset):
                 normalized_gyroscope = (df['Composed_Gyroscope'] - df['Composed_Gyroscope'].mean())/ (df['Composed_Gyroscope'].std())
                 peaks, _ = find_peaks(normalized_acceleration, distance = self.window_size*2, prominence = 2)
 
-
+                #if normalize, then replace raw data with normalized data
                 if self.normalize == True:
                     df['Composed_Acceleration'] = normalized_acceleration
                     df['Composed_Gyroscope'] = normalized_gyroscope

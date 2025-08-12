@@ -1,6 +1,6 @@
 # Maya Purohit
 #6/19/2025
-# Dataloader.py
+# CNN_Dataloader_colab.py
 # Develop a dataloader to make data samples to train Surface Classification CNN model
 
 import os
