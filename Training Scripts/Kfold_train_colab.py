@@ -1,6 +1,6 @@
 # Maya Purohit
 # Train.py
-# Used to train our models 
+# Used to train our models for each individual users with validation set (original)
 
 import os
 import time
@@ -40,7 +40,7 @@ import wandb
 import time
 import psutil
 
-from CNN_Dataloader_colab import MotionDataset
+from CNN_Dataloader_colab_transfer import MotionDataset
 from AlexNet import AlexNetCNN
 from VGGNet import VGGNetCNN
 from Test_CNN import TestCNN
@@ -85,6 +85,7 @@ def train(config):
 
 
         
+    #configuration for tracking training and validation loss and accuracy with WandB
     wandb.config = {
         "folds":  config['num_folds'],
         "users":  len(config['user_num']),
@@ -95,16 +96,19 @@ def train(config):
     }
 
 
+    #track accuracies 
     all_accuracy = np.zeros(5)
     complete_accs = np.zeros((5,10))
     all_cpu = np.zeros(5)
+
+    #iterate for each user 
     for k in range(len(config['user_num'])):
         print(config['user_num'][k])
         fig, ax = plt.subplots(4,5, figsize = (12,8), sharex='col', sharey= 'row')
         train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'], num_stacks= config['num_stacks'], user_num= config['user_num'][k], mode ="train", test_type = config['test_type'])
         
         
-        #Define K-Folds Setup
+        #define K-Folds Setup
 
         kf = KFold(n_splits=config['num_folds'], shuffle=True, random_state=42)
 
@@ -114,7 +118,7 @@ def train(config):
             print(f"\nFOLD {fold+1}/{config['num_folds']}")
 
         
-        
+            #create training set and then use k-folds to set up the testing and validation sets
             train_subset = Subset(train_dataset, train_idx)
             val_subset = Subset(train_dataset, val_idx)
 
@@ -127,7 +131,7 @@ def train(config):
                                                 batch_size=config["batch_size"],
                                                 shuffle=True)
             
-            
+            #define model based on the type entered by the user 
             if config['model_name'] == "resnet":
                 
                 model = TestCNN(include_attention= config['include_attention'], input_channels= config['input_channels'],
@@ -164,11 +168,6 @@ def train(config):
                     num_blocks=config['num_blocks'],
                     include_attention=config['include_attention']
                 )
-            elif config['model_name']  == "LSTM":
-                model = LSTM_Model(input_size = config['input_channels'],
-                                hidden_size = config['hidden_size'],
-                                num_layers = config['num_layers'],
-                                batch_first = config['batch_first'])
             elif config['model_name'] == "model3":
                 model = Model3CNN(input_channels= config['input_channels'],
                     num_features=config['num_features'],
@@ -179,6 +178,8 @@ def train(config):
             #     weight_decay=1e-2
             # )
 
+            #optimizer for learning rate 
+
             optimizer = optim.Adam(
                 model.parameters(),
                 lr=config['learning_rate'],
@@ -187,15 +188,16 @@ def train(config):
 
 
 
-
+            #for cuda devices 
             model = model.to(device)
 
-
+            #count the number of parameters 
             learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
             
+            #scheduler for learning rate 
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size = config['lr_decay_step'], gamma = config['lr_decay_gamma'])
-            #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['num_epochs'], eta_min=1e-6)
-
+           
+            #define loss function 
             loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
         
             train_losses = []
@@ -219,7 +221,7 @@ def train(config):
                 #For each batch
                 for batch in train_pbar:
                     
-                
+                    #access values in dictionary 
                     data_sample = batch['data_sample'].to(device)
                     
                     
@@ -236,6 +238,7 @@ def train(config):
                     output = model(data_sample)
                     end = time.time()
 
+                    #Measure latency and throughput 
                     latency = (end - start)/config['batch_size']
                     throughput = config['batch_size']/((end - start) + (1e-5))
                     latency_vals.append(latency)
@@ -256,7 +259,7 @@ def train(config):
                     total += class_label.size(0)
                     correct += (output_labels == class_label).sum().item()
                 
-
+                #print and log accuracy for training 
                 train_accuracy = 100 * correct / total
                 print(f'Accuracy on the {total} training images: {train_accuracy:.2f}%')
                 wandb.log({
@@ -273,6 +276,7 @@ def train(config):
 
                 wandb.log({f"Train Loss User {k} Fold {fold + 1}": train_loss, "epoch": epoch + 1})
                 
+                #run model on validation set for a user-defined number of intervals 
                 should_validate = (
                     config['validation_interval'] > 0 and 
                     (epoch + 1) % config['validation_interval'] == 0
@@ -313,6 +317,7 @@ def train(config):
                     sum_thr = 0
             
             
+            #tracking for accuracy for each fold 
             
             plt.figure(fig.number)
             cpu_results[fold] = cpu_usage
@@ -338,6 +343,7 @@ def train(config):
         average_cpu = np.mean(cpu_results)
         all_cpu[k] = average_cpu
         
+        #create diagram for each user 
         fig.suptitle(f"Latency and Throughout: Parameters {learnable_params}")
         fig.supxlabel('Number of Epoch')
         plt.savefig(os.path.join(config['save_dir'], f'Latency and Throughput User {k + 1}'))
@@ -358,6 +364,8 @@ def train(config):
         fold_accs, average_accuracy = test(user_ind=k)
         complete_accs[k] = fold_accs
         all_accuracy[k] = average_accuracy
+    
+    #print metrics at the end of the run: (average accuracy for each user across folds, each fold accuracy )
     print(f"Test Accuracy for Each User: All: {all_accuracy/100}, Avg: {np.mean(all_accuracy)/100}")
     print(f"Test Accuracy for Each User: All: {complete_accs/100}")
     print(f"CPU Usage for Each User All: {all_cpu}, Avg: {np.mean(all_cpu)}")
@@ -368,14 +376,14 @@ def train(config):
 
 def evaluate(data_loader, model, fold_num, user_num, num_epoch):
     """
-    Evaluate the Siamese network
+    Evaluate the network
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        data_loader: validation data
+        model: the model being trained
+        fold_num: the number of the fold currently being run
+        user_num: the number of the user that is being tested
+        num_epch: the number of the epoch that is being run
     """
     # Set model to evaluation mode
 
@@ -418,14 +426,10 @@ def evaluate(data_loader, model, fold_num, user_num, num_epoch):
 
 def test(user_ind, model = None):
     """
-    Evaluate the Siamese network
+    Test the network on new data
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        user_ind: the number of the user that is being tested 
     """
     # Set Model
 
@@ -475,7 +479,7 @@ def test(user_ind, model = None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
-    #Make dataset and dataloader 
+    #Make dataset and dataloader with new data 
 
     test_dataset =  MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'], num_stacks= config['num_stacks'], input_channels=config['input_channels'], user_num= config['user_num'][user_ind], mode ="test", test_type = config['test_type'])
 
@@ -484,11 +488,13 @@ def test(user_ind, model = None):
                                             shuffle=True)
     
 
+    #define figures for testing 
     fig_prec, axes_prec = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')  
     fig_conf, axes_conf = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')
-    accuracy_results = np.zeros(10)
+    accuracy_results = np.zeros(config["num_folds"])
     for j in range(config['num_folds']):
 
+        #open model from file 
         if os.path.exists(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth')):
            checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth'))
         else:
@@ -508,12 +514,13 @@ def test(user_ind, model = None):
         total = 0.0
 
     
-        
-        precision_recall = np.zeros([5, 3]) # 5 for the number of classes, 4 for the true/false positive/negative
+        #measure precision and recall for each class
+        precision_recall = np.zeros([5, 3]) # 5 for the number of classes, 3 for the true/false positive/negative
         all_outputs = []
         all_labels = []
         with torch.no_grad():
             test_pbar = tqdm(test_dataloader, desc=f"Test")
+            #test with data samples 
             for data_samples in test_pbar:
                 data_samples["data_sample"] = data_samples["data_sample"].to(device)
                 data_samples["class_label"] = data_samples["class_label"] .to(device)
@@ -622,6 +629,7 @@ if __name__ == "__main__":
     config = {
 
         
+        #directory for saving and retrieving data
 
         'root_dir': "/content/drive/MyDrive/DeepLearningFallDetection/data",
         'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2-AddActivation/DomainAdaptation/2d-4stack",  # Directory specific to the model being tested
@@ -636,33 +644,26 @@ if __name__ == "__main__":
         'lr_decay_step': 10,            
         'lr_decay_gamma': 0.5,           
         'validation_interval': 5,        
-        'input_channels'   : 2,
+        'input_channels'   : 2, #use composed data 
         'test_ratio' : 0,
         'val_ratio': 0,
-        'window_size' : 50,
-        'num_features': 50,             
+        'window_size' : 50, #how large the range for data samples is 
+        'num_features': 50,    #the depth of the model          
         'num_blocks': 0,      
-        'test_type' : "individual", 
+        'test_type' : "individual",  #what kind of data should be returned from the data loader
         'normalize' : True,       
         'include_attention': False,
         'user_num' : [1,2,3,4,5],
-        'model_name': "model22d",
-        'num_folds' : 10,
-        'num_stacks': 2,
+        'model_name': "model22d", #defines the model that will be run
+        'num_folds' : 10, #how many folds to run 
+        'num_stacks': 2, #how many times to stack the data 
 
-        
-        
-
-        # LSTM Training parameters
-        'hidden_size': 64,
-        'num_layers': 32,
-        'batch_first': True,
 
         'checkpoint_dir': 'checkpoints', 
         'run_type' : 'train',
-        'best_dir': 'best_model',         # Directory to save sample images
-        'save_every': 5,                 # Save checkpoint every N epochs
-        'resume': None,                  # Path to checkpoint to resume from
+        'best_dir': 'best_model',         #Directory to save sample images
+        'save_every': 5,                 #Save checkpoint every N epochs
+        'resume': None,                  #Path to checkpoint to resume from
     }
     
 
