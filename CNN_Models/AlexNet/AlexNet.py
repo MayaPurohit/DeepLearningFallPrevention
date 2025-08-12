@@ -2,7 +2,7 @@
 
 # Maya Purohit
 # AlexNet
-# Develop classes to develop the AlexNet Architecture Model
+# Develop classes to replicate the AlexNet Architecture Model
 
 import torch
 import torch.nn as nn
@@ -16,13 +16,13 @@ import torch.nn.functional as F
 class AlexNetCNN(nn.Module):
     def __init__(self, input_channels=6, num_classes=5, num_stacks = 2):
         """
-  
+        Modified implementation of the AlexNet architecture for benchmark testing 
         """
 
         self.num_stack = num_stacks
         super(AlexNetCNN, self).__init__()
         
-        #Kernel Size = 11, stride = 4
+
         self.first_conv = nn.Sequential(
             nn.Conv2d(1, 96, kernel_size=3, stride=4, padding=2),
             nn.BatchNorm2d(96),
@@ -76,7 +76,9 @@ class AlexNetCNN(nn.Module):
         pass
         
     def _initialize_weights(self):
-
+        '''
+        Initialize weights and biases for each type of layer 
+        '''
         for m in self.modules(): #initialize the appropriate weights
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
@@ -87,8 +89,9 @@ class AlexNetCNN(nn.Module):
         
         
     def forward(self, x):
-        
-       
+        '''
+        Forward pass through the layers 
+        '''
         x = x.view(x.size(0), 1, self.num_stack*2, 50)
 
         x = self.first_conv(x)
@@ -104,9 +107,6 @@ class AlexNetCNN(nn.Module):
 
        
         x = self.fifth_conv(x)
-
-
-       
 
         x = torch.flatten(x, 1)  
 
