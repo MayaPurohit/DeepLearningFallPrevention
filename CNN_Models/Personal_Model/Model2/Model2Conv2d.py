@@ -34,6 +34,9 @@ class ResidualBlock(nn.Module):
         
     def forward(self, x):
    
+        '''
+        Residual Block with skip connection
+        '''
         residual = x.clone()
 
         x = self.conv1(x)
@@ -52,7 +55,7 @@ class ResidualBlock(nn.Module):
 class SecondModelCNN2d(nn.Module):
     def __init__(self, input_channels=6, num_stack = 3, num_classes=5, num_features =  16, num_blocks=2, include_attention = True):
         """
-  
+        Model Architecture with 2d Convolutions
         """
         super(SecondModelCNN2d, self).__init__()
 
@@ -102,7 +105,9 @@ class SecondModelCNN2d(nn.Module):
         pass
         
     def _initialize_weights(self):
-
+        '''
+        Initialize weights and biases for each type of layer 
+        '''
         for m in self.modules(): #initialize the appropriate weights
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_uniform_(m.weight, a=0, mode='fan_in', nonlinearity='leaky_relu')
@@ -114,7 +119,9 @@ class SecondModelCNN2d(nn.Module):
         pass
         
     def forward(self, x):
-        
+        '''
+        Forward pass through the layers 
+        '''
         x = x.view(x.size(0), 1, self.num_stack*2, 50) 
         x = self.initial_conv(x)
 

@@ -3,7 +3,7 @@
 # Maya Purohit
 
 # Model.py
-# Develop classes to develop a simple test model with self attention to test
+# Develop classes for CNN Architecture of model 
 
 import torch
 import torch.nn as nn
@@ -16,7 +16,7 @@ import torch.nn as nn
   
 class ResidualBlock(nn.Module):
     """Residual block with skip connection"""
-    #extracting the feature 
+
     def __init__(self, channels):
         super(ResidualBlock, self).__init__()
 
@@ -41,6 +41,7 @@ class ResidualBlock(nn.Module):
         x = self.conv2(x)
         x = self.bn2(x)
 
+        #skip connection by adding residual layer back 
         x += residual
  
         x = self.leakyRelu(x)
@@ -50,10 +51,11 @@ class ResidualBlock(nn.Module):
 class SecondModelCNN(nn.Module):
     def __init__(self, input_channels=6, num_stack = 3, num_classes=5, num_features =  16, num_blocks=2, include_attention = True):
         """
-  
+        CNN Architecture for 1D convolutions
         """
         super(SecondModelCNN, self).__init__()
 
+        #determines if we use attention and the size of the data samples
         self.include_attention = include_attention
         self.num_stack = num_stack
     
@@ -97,7 +99,9 @@ class SecondModelCNN(nn.Module):
         pass
         
     def _initialize_weights(self):
-
+        '''
+        Define weight and bias distribution for all of the layers initially
+        '''
         for m in self.modules(): #initialize the appropriate weights
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
                 nn.init.kaiming_uniform_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
@@ -109,7 +113,10 @@ class SecondModelCNN(nn.Module):
         pass
         
     def forward(self, x):
-        
+        '''
+        Pass data through all of the layers in a forward pass
+
+        '''
         x = self.initial_conv(x)
 
         x = self.block1(x)

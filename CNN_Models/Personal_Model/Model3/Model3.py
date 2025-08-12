@@ -2,7 +2,7 @@
 
 # Maya Purohit
 
-# PersModel.py
+# Model3.py
 # Develop classes to develop a simple test model
 
 import torch
@@ -52,7 +52,7 @@ class SelfAttention(nn.Module):
 class Model3CNN(nn.Module):
     def __init__(self, input_channels=6, num_classes=5, num_features =  16, include_attention = True):
         """
-  
+        Smaller Model initialization and testing 
         """
 
         self.include_attention = include_attention
@@ -70,16 +70,25 @@ class Model3CNN(nn.Module):
             nn.BatchNorm1d(num_features*3)
         )
 
+        self.mid_conv2 = nn.Sequential(
+            nn.Conv1d(num_features*3, num_features*5, 3, 1, padding=1),
+            nn.BatchNorm1d(num_features*5)
+        )
 
-        self.attention = SelfAttention(num_features*3)
+
+
+        self.attention = SelfAttention(num_features*5)
     
-        self.fc_layer = nn.Linear(num_features*3, num_classes)
+        self.fc_layer = nn.Linear(num_features*5, num_features*5)
+        self.fc_layer2 = nn.Linear(num_features*5, num_classes)
        
         self._initialize_weights()
         pass
         
     def _initialize_weights(self):
-
+        '''
+        Initialize weights and biases for all layer types
+        '''
         for m in self.modules(): #initialize the appropriate weights
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
@@ -91,13 +100,15 @@ class Model3CNN(nn.Module):
         pass
         
     def forward(self, x):
-        
+        '''
+        Forward pass through the layers 
+        '''
         x = self.initial_conv(x)
 
        
         x = self.mid_conv(x)
         
-
+        x = self.mid_conv2(x)
         if self.include_attention == True:
             x = x.permute(2, 0, 1)  
 
@@ -108,5 +119,6 @@ class Model3CNN(nn.Module):
         x = torch.mean(x, dim=2)
        
         x = self.fc_layer(x)
+        x = self.fc_layer2(x)
         return x
     
