@@ -14,7 +14,7 @@ Five different users walk on the following surfaces:
 # Directory Layout:
 
 ```text
--DeepLearningFallPrevention-main
+-DeepLearningFallPrevention
     |   README.md
     |
     +---CNN_Models
