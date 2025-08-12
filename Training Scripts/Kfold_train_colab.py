@@ -299,7 +299,7 @@ def train(config):
             cpu_end = process.cpu_percent()
             cpu_usage = cpu_end - cpu_start
 
-
+            #calculate the latency and throughput
             print("CPU Usage: ", cpu_usage)
             sum_lat = 0
             sum_thr = 0
