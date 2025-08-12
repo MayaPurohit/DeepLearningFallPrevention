@@ -62,7 +62,7 @@ class SecondModelCNN2d(nn.Module):
         self.include_attention = include_attention
         self.num_stack = num_stack
     
-        
+        #one input channel as we treat the data sample as gray scale images
         self.initial_conv = nn.Sequential(
             nn.Conv2d(1, num_features, 3, 1, padding=1),
             nn.BatchNorm2d(num_features),

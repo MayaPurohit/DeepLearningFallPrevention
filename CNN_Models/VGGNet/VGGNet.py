@@ -2,7 +2,7 @@
 
 # Maya Purohit
 # VGGNet.py
-# Develop classes to replicate the VGGNet Architecture Model
+# Develop classes to replicate the VGGNet Architecture Model with 2D convolutions
 
 import torch
 import torch.nn as nn
