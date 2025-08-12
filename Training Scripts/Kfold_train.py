@@ -1,5 +1,5 @@
 # Maya Purohit
-# Train.py
+# Kfold_train.py
 # Used to train our models 
 
 import os

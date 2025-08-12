@@ -1,6 +1,6 @@
 # Maya Purohit
-# Train.py
-# Used to train our models 
+# Kfold_train_colab_new.py
+# Used to train our models for individual users without validation set and stratified k-fold
 
 import os
 import time
@@ -84,7 +84,7 @@ def train(config):
 
 
 
-        
+    # Set up logging for training accuracy and loss 
     wandb.config = {
         "folds":  config['num_folds'],
         "users":  len(config['user_num']),
@@ -96,8 +96,10 @@ def train(config):
 
 
     each_fold_acc = np.zeros(config['num_folds'])
-    complete_accs = np.zeros((5,10))
+    complete_accs = np.zeros((5,10)) #fold accuracy for each class 
     all_cpu = np.zeros(5)
+
+    #iterate through all of the users 
     for k in range(len(config['user_num'])):
         print(config['user_num'][k])
         fig, ax = plt.subplots(4,5, figsize = (12,8), sharex='col', sharey= 'row')
@@ -118,7 +120,7 @@ def train(config):
             print(f"\nFOLD {fold+1}/{config['num_folds']}")
 
         
-        
+            #Set up training and test set 
             train_subset = Subset(train_dataset, train_idx)
             val_subset = Subset(train_dataset, val_idx)
 
@@ -131,7 +133,7 @@ def train(config):
                                                 batch_size=config["batch_size"],
                                                 shuffle=True)
             
-            
+            #Define model depending on type in config
             if config['model_name'] == "resnet":
                 
                 model = TestCNN(include_attention= config['include_attention'], input_channels= config['input_channels'],
@@ -194,7 +196,7 @@ def train(config):
 
             model = model.to(device)
 
-
+            #Count the number of parameters and define optimizers and schedulers for learning rate
             learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
             
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size = config['lr_decay_step'], gamma = config['lr_decay_gamma'])
@@ -212,6 +214,7 @@ def train(config):
             process = psutil.Process()
             cpu_start = process.cpu_percent()
 
+            #iterate through all epochs
             for epoch in range(0, config['num_epochs']):
                 model.train()
                 epoch_losses = []
@@ -223,7 +226,7 @@ def train(config):
                 #For each batch
                 for batch in train_pbar:
                     
-                
+                    #pass data through model and outputs through loss function
                     data_sample = batch['data_sample'].to(device)
                     
                     
@@ -250,7 +253,7 @@ def train(config):
 
                     loss =  loss_fn(output, class_label)
                     
-                    
+                    #optimization step
                     loss.backward()
                     optimizer.step()
                     
@@ -260,7 +263,7 @@ def train(config):
                     total += class_label.size(0)
                     correct += (output_labels == class_label).sum().item()
                 
-
+                #calculate accuracy for training set 
                 train_accuracy = 100 * correct / total
                 print(f'Accuracy on the {total} training images: {train_accuracy:.2f}%')
                 wandb.log({
@@ -278,6 +281,7 @@ def train(config):
                 wandb.log({f"Train Loss User {k} Fold {fold + 1}": train_loss, "epoch": epoch + 1})
                 
 
+            #retrive metrics from testing function 
             accuracy, precision_list, recall_list, all_outputs, all_labels = test(val_dataloader, model)
             each_fold_acc[fold] = accuracy
 
@@ -286,7 +290,7 @@ def train(config):
             cpu_end = process.cpu_percent()
             cpu_usage = cpu_end - cpu_start
 
-
+            #Measure efficiency metrics 
             print("CPU Usage: ", cpu_usage)
             sum_lat = 0
             sum_thr = 0
@@ -304,7 +308,7 @@ def train(config):
                     sum_thr = 0
  
             
-            
+            #Plot Latency and throughput
             plt.figure(fig.number)
             cpu_results[fold] = cpu_usage
             if fold >= int(config['num_folds'] / 2):
@@ -327,7 +331,7 @@ def train(config):
                     ax[1, fold].set_ylabel("# samples/s")
             
             
-            
+            #Plot precision and recall for each fold 
             locations = ['TH', 'Ca', 'Con', 'B', 'L']
             if fold >= int(config['num_folds'] / 2):
                 axes_prec[1, fold - (int(config['num_folds'] / 2))].plot(locations, precision_list, label = "Precision")
@@ -357,6 +361,7 @@ def train(config):
         fig_prec.supxlabel("Class Label")
         fig_prec.supylabel("Percentage")
 
+        #create labels and figures
         fig_prec.suptitle(f"Precision and Recall Curve for Each Class Attention: {config['include_attention']}")
         if config['test_type'] == "individual":
             fig_prec.savefig(os.path.join(config['save_dir'], f"Precision_Recall (K-Fold) User {config['user_num'][k]}"))
@@ -382,7 +387,7 @@ def train(config):
         plt.close(fig)
 
  
-
+    #Print all statistics
     each_user = np.mean(complete_accs, axis=1)/100
 
     print(f"All: {each_user}, Avg: {np.mean(each_user)}")
@@ -391,68 +396,16 @@ def train(config):
 
             
 
-    
 
-# def evaluate(data_loader, model, fold_num, user_num, num_epoch):
-#     """
-#     Evaluate the Siamese network
-    
-#     Args:
-#         args: Command line arguments
-#         split: Data split ('training' or 'testing')
-#         data_loader: DataLoader for the split
-#         siamese_net: Trained Siamese network
-#         visualize: Whether to visualize predictions
-#     """
-#     # Set model to evaluation mode
-
-#     print("Testing")
-#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-#     model = model.to(device)
-#     model.eval()
-    
-#     correct = 0.0
-#     total = 0.0
-
-    
-#     with torch.no_grad():
-        
-#         val_pbar = tqdm(data_loader, desc=f"Fold {fold_num}")
-#         for data_samples in val_pbar:
-#             data = data_samples["data_sample"].to(device)
-#             labels = data_samples["class_label"].to(device)
-            
-#             if config["model_name"] != "LSTM":
-#                 data = data.permute(0, 2, 1) 
-            
-#             #Check to see how many samples were classified correctly 
-#             output_labels = model(data)
-#             _, outputs = torch.max(output_labels, dim = 1)
-
-#             total += labels.size(0)
-#             correct += (outputs == labels).sum().item()
-    
-#     #Calculate accuracy
-#     accuracy = 100 * correct / total
-#     print(f'Accuracy on the {total} validation images: {accuracy:.2f}%')
-    
-#     model.train()
-    
-#     wandb.log({f"Validation Accuracy User {user_num} Fold {fold_num + 1}": accuracy, "epoch": num_epoch})
-    
-#     return accuracy
 
 
 def test(data_loader, model = None):
     """
-    Evaluate the Siamese network
+    Evaluate the  network
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        dataloader: dataloader object that holds the testing data
+        model: model to test if provided
     """
     # Set Model
 
@@ -475,6 +428,8 @@ def test(data_loader, model = None):
     with torch.no_grad():
         test_pbar = tqdm(data_loader, desc=f"Test")
         for data_samples in test_pbar:
+
+            #send data through the model for accuracy testing on new data
             data_samples["data_sample"] = data_samples["data_sample"].to(device)
             data_samples["class_label"] = data_samples["class_label"] .to(device)
             

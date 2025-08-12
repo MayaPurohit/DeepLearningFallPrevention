@@ -1,5 +1,5 @@
 # Maya Purohit
-# Train.py
+# train_colab.py
 # Used to train our models without k-fold, just once 
 
 import os
@@ -77,7 +77,7 @@ def train(config):
 
 
 
-
+    #iterate through each user 
     for k in range(len(config['user_num'])):
         print(config['user_num'][k])
 
@@ -91,6 +91,7 @@ def train(config):
         "loss_function": "Cross Entropy Loss",
         }
 
+        #Set model based on config 
         if config['model_name'] == "resnet":
             
             model = TestCNN(include_attention=config['include_attention'], input_channels= config['input_channels'],
@@ -138,6 +139,8 @@ def train(config):
                             batch_first = config['batch_first'])
 
 
+
+        #Set optimizer, scheduler and count parameters 
         learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
         model = model.to(device)
@@ -167,7 +170,7 @@ def train(config):
         #Define datasets, dataloaders, and loss function 
         loss_fn = nn.CrossEntropyLoss()
 
-
+        #make validation and training dataloaders
         train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], num_stacks=config['num_stack'], input_channels=config['input_channels'],user_num= config['user_num'][k], mode ="train", test_type = config['test_type'])
         val_dataset = MotionDataset(config["root_dir"], config["window_size"],test_ratio = config['test_ratio'],  val_ratio= config['val_ratio'], normalize=config['normalize'],num_stacks=config['num_stack'], input_channels=config['input_channels'],user_num= config['user_num'][k], mode ="val", test_type = config['test_type'])
 
@@ -200,6 +203,7 @@ def train(config):
         process = psutil.Process()
         cpu_start = process.cpu_percent()
 
+        #iterate through each epoch
         for epoch in range(0, config['num_epochs']):
             current_lr = optimizer.param_groups[0]['lr']
             print(f"Epoch {epoch+1}: Learning Rate = {current_lr:.6f}")
@@ -213,6 +217,7 @@ def train(config):
             #For each batch
             for batch in train_pbar:
                 
+                #Send data through model for optimization 
             
                 data_sample = batch['data_sample'].to(device)
                 
@@ -238,7 +243,7 @@ def train(config):
                 output_labels = torch.argmax(output, dim = 1)
                 loss =  loss_fn(output, class_label)
                 
-                
+                #optimization step
                 loss.backward()
                 optimizer.step()
                 
@@ -273,6 +278,8 @@ def train(config):
                 (epoch + 1) % config['validation_interval'] == 0
             ) or (epoch + 1 == config['num_epochs'])
             
+
+            #save the model that has the highest validation accuracy
             if should_validate:
 
                 accuracy = evaluate(val_dataloader, model, num_epoch= epoch + 1, user_ind = k)
@@ -287,13 +294,7 @@ def train(config):
 
                     print(f"Saved best model with accuracy: {accuracy:.2f}")
             
-            # if (epoch + 1) % config['save_every'] == 0:
-            #     torch.save({
-            #         'epoch': epoch + 1,
-            #         'model_state_dict': model.state_dict(),
-            #         'optimizer_state_dict': optimizer.state_dict(),
-            #     }, os.path.join(config['save_dir'], config['checkpoint_dir'], f'checkpoint_epoch_{epoch+1}.pth'))
-        
+
         cpu_end = process.cpu_percent()
         wandb.finish()
 
@@ -304,6 +305,8 @@ def train(config):
         cpu_usage = cpu_end - cpu_start
 
 
+
+        #calculate efficiency metrics 
         print("CPU Usage: ", cpu_usage)
 
         sum_lat = 0
@@ -324,7 +327,7 @@ def train(config):
     
         #plot the values 
 
-
+        #plot efficiency metrics 
         fig, ax = plt.subplots(2,1, sharex='col')
         plt.figure(fig.number)
         ax[0].plot(range(len(plot_latency)), plot_latency)
@@ -342,15 +345,15 @@ def train(config):
 
 def evaluate(data_loader, model, num_epoch, user_ind):
     """
-    Evaluate the Siamese network
+    Evaluate the network
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        data_loader: validation data
+        model: the model being trained
+        num_epoch: the number of the epoch that is being run
+        user_ind: the index of the user that is being tested
     """
+
     # Set model to evaluation mode
 
     print("Validating")
@@ -370,6 +373,7 @@ def evaluate(data_loader, model, num_epoch, user_ind):
         val_pbar = tqdm(data_loader, desc=f"Epoch {num_epoch}")
         for data_samples in val_pbar:
 
+            #send data through to calculate accuracy
             data = data_samples["data_sample"].to(device)
             labels = data_samples["class_label"].to(device)
             
@@ -396,14 +400,11 @@ def evaluate(data_loader, model, num_epoch, user_ind):
 
 def test(user_ind, model = None):
     """
-    Evaluate the Siamese network
+    Test the network on new data
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        user_ind: the number of the user that is being tested 
+        model: the model to be tested if it is provided
     """
     # Set Model
 
@@ -450,7 +451,7 @@ def test(user_ind, model = None):
 
 
 
-        # checkpoint = torch.load(os.path.join(config['save_dir'], config['checkpoint_dir'], 'checkpoint_epoch_30.pth'))
+    
         checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], f'best_model.pth'))
 
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -482,6 +483,8 @@ def test(user_ind, model = None):
     with torch.no_grad():
         test_pbar = tqdm(test_dataloader, desc=f"Test")
         for data_samples in test_pbar:
+
+            #send data through model to calculate accuracy
             data_samples["data_sample"] = data_samples["data_sample"].to(device)
             data_samples["class_label"] = data_samples["class_label"] .to(device)
             
@@ -535,6 +538,7 @@ def test(user_ind, model = None):
 
     locations = ['Tiled Hallway', 'Carpet', 'Concrete', 'Brick', 'Lawn']
 
+    #add labels to all of the plots 
     plt.figure()
     plt.plot(locations, precision_list, label = "Precision")
     plt.plot(locations, recall_list, label = "Recall")
@@ -559,7 +563,7 @@ def test(user_ind, model = None):
     plt.close() 
 
    
-
+    #for confusion matrix
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm_percent, annot=True, fmt=".1f", cmap="Blues", xticklabels=[0, 1, 2, 3, 4], yticklabels=[0, 1, 2, 3, 4])
     plt.xlabel("Predicted Label")

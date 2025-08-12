@@ -1,6 +1,6 @@
 # Maya Purohit
-# Train.py
-# Used to train our models 
+# Kfold_train_general.py
+# Used to train our models for windows machine with one model trained on all five users 
 
 import os
 import time

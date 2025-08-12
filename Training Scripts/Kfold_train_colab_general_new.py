@@ -1,7 +1,7 @@
 # Maya Purohit
-# Train.py
+# Kfold_train_colab_general_new.py
 # Used to train our models 
-# Use stratified K-fold with no validation set 
+# Use stratified K-fold with no validation set and train one model with all five users 
 
 import os
 import time
@@ -55,8 +55,6 @@ from sklearn.model_selection import StratifiedKFold
 
 
 
-# Metrics
-
 
 
 
@@ -85,7 +83,7 @@ def train(config):
 
 
 
-        
+    #Configuration for tracking accuracy
     wandb.config = {
         "folds":  config['num_folds'],
         "users":  len(config['user_num']),
@@ -102,7 +100,7 @@ def train(config):
     train_dataset = MotionDataset(config["root_dir"], config["window_size"], test_ratio = config['test_ratio'], val_ratio= config['val_ratio'], normalize=config['normalize'], input_channels=config['input_channels'], num_stacks= config['num_stacks'], user_num= config['user_num'], mode ="train", test_type = config['test_type'])
 
     
-    #Define K-Folds Setup
+    #Define Stratified K-Folds Setup
 
     kf = StratifiedKFold(n_splits=config['num_folds'], shuffle=True, random_state=42)
 
@@ -112,10 +110,12 @@ def train(config):
     fig_prec, axes_prec = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')  
     fig_conf, axes_conf = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')
     accuracy_results = np.zeros(config['num_folds'])
+
+    #Set-up folds 
     for fold, (train_idx, val_idx) in enumerate(kf.split(train_dataset, train_dataset.all_labels)):
         print(f"\nFOLD {fold+1}/{config['num_folds']}")
 
-    
+        #Set up training and testing set 
     
         train_subset = Subset(train_dataset, train_idx)
         val_subset = Subset(train_dataset, val_idx)
@@ -129,6 +129,7 @@ def train(config):
                                             batch_size=config["batch_size"],
                                             shuffle=True)
         
+        #Define model based on config choice
         
         if config['model_name'] == "resnet":
             
@@ -192,6 +193,7 @@ def train(config):
 
         model = model.to(device)
 
+        # Count the number of learnable parameters and set scheduler and optimizers
 
         learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         
@@ -222,6 +224,7 @@ def train(config):
             for batch in train_pbar:
                 
             
+                #Send data through the model and use loss function for optimization
                 data_sample = batch['data_sample'].to(device)
                 
                 
@@ -248,7 +251,7 @@ def train(config):
 
                 loss =  loss_fn(output, class_label)
                 
-                
+                #optimization steps 
                 loss.backward()
                 optimizer.step()
                 
@@ -275,7 +278,7 @@ def train(config):
 
             wandb.log({f"Train Loss Fold {fold + 1}": train_loss, "epoch": epoch + 1})
             
-
+        #retrieve metrics from the testing function 
         accuracy, precision_list, recall_list, all_outputs, all_labels = test(val_dataloader, model)
         each_fold_acc[fold] = accuracy
 
@@ -285,6 +288,7 @@ def train(config):
         cpu_usage = cpu_end - cpu_start
         all_cpu[fold] = cpu_usage
 
+        #Efficiency calculations
         print("CPU Usage: ", cpu_usage)
         sum_lat = 0
         sum_thr = 0
@@ -302,7 +306,7 @@ def train(config):
                 sum_thr = 0
 
         
-        
+        #Latency and throughput for each fold 
         plt.figure(fig.number)
         cpu_results[fold] = cpu_usage
         if fold >= int(config['num_folds'] / 2):
@@ -324,7 +328,7 @@ def train(config):
                 ax[0, fold].set_ylabel("s/sample")
                 ax[1, fold].set_ylabel("# samples/s")
         
-        
+        #Precision and recall for each fold 
         locations = ['TH', 'Ca', 'Con', 'B', 'L']
         if fold >= int(config['num_folds'] / 2):
             axes_prec[1, fold - (int(config['num_folds'] / 2))].plot(locations, precision_list, label = "Precision")
@@ -354,6 +358,7 @@ def train(config):
         fig_prec.supxlabel("Class Label")
         fig_prec.supylabel("Percentage")
 
+        #Precision and recall graph
         fig_prec.suptitle(f"Precision and Recall Curve for Each Class Attention: {config['include_attention']}")
         fig_prec.savefig(os.path.join(config['save_dir'], f"Precision_Recall (K-Fold) Overall"))
     
@@ -389,14 +394,11 @@ def train(config):
 
 def test(data_loader, model = None):
     """
-    Evaluate the Siamese network
+    Evaluate the  network
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        dataloader: dataloader object that holds the testing data
+        model: model to test if provided
     """
     # Set Model
 
@@ -416,6 +418,8 @@ def test(data_loader, model = None):
     precision_recall = np.zeros([5, 3]) # 5 for the number of classes, 3 for the true/false positive/negative
     all_outputs = []
     all_labels = []
+
+    #pass data through the model for accuracy calculations
     with torch.no_grad():
         test_pbar = tqdm(data_loader, desc=f"Test")
         for data_samples in test_pbar:
@@ -475,7 +479,7 @@ if __name__ == "__main__":
     config = {
 
         
-
+        #Data directories 
         'root_dir': "/content/drive/MyDrive/DeepLearningFallDetection/data",
         'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/2d-stack4/Again0",  # Directory specific to the model being tested
         
@@ -496,12 +500,12 @@ if __name__ == "__main__":
         'num_features': 50,             
         'num_blocks': 0,      
         'test_type' : "normal", 
-        'normalize' : True,       
-        'include_attention': False,
+        'normalize' : True,       #normalize data or no
+        'include_attention': False, #include self-attention layer
         'user_num' : [1,2,3,4,5],
-        'model_name': "model22d",
-        'num_folds' : 10,
-        'num_stacks': 2,
+        'model_name': "model22d", #model type 
+        'num_folds' : 10, #how many folds to run for 
+        'num_stacks': 2, #how many times to stack the data 
 
         
         

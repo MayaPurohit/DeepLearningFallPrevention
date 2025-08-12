@@ -1,6 +1,6 @@
 # Maya Purohit
-# Train.py
-# Used to train our models for one model woth all five users with validation set 
+# Kfold_train_general_colab.py
+# Used to train our models for one model with all five users with validation set 
 
 import os
 import time
@@ -84,7 +84,7 @@ def train(config):
 
 
 
-        
+    #wandb for tracking accuracy and loss
     wandb.config = {
         "folds":  config['num_folds'],
         "users":  len(config['user_num']),
@@ -124,7 +124,7 @@ def train(config):
                                             shuffle=True)
         
         
-        #Define our model
+        #Define our model based on config
         if config['model_name'] == "resnet":
             
             model = TestCNN(include_attention= config['include_attention'], input_channels= config['input_channels'],
@@ -189,8 +189,10 @@ def train(config):
 
         learnable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         
+        #Define loss function, scheduler, optimizer for model training
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size = config['lr_decay_step'], gamma = config['lr_decay_gamma'])
         #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['num_epochs'], eta_min=1e-6)
+
 
         loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
     
@@ -214,7 +216,7 @@ def train(config):
             train_pbar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config['num_epochs']}")
             #For each batch
             for batch in train_pbar:
-                
+                #send data through model and use loss function for optimization
             
                 data_sample = batch['data_sample'].to(device)
                 
@@ -269,11 +271,14 @@ def train(config):
 
             wandb.log({f"Train Loss Fold {fold + 1}": train_loss, "epoch": epoch + 1})
             
+
+            #validate model if at a certain interval
             should_validate = (
                 config['validation_interval'] > 0 and 
                 (epoch + 1) % config['validation_interval'] == 0
             ) or (epoch + 1 == config['num_epochs'])
             
+            #save the model that has the highest validation accuracy
             if should_validate:
                 accuracy = evaluate(val_dataloader, model, fold_num=fold, num_epoch=epoch)
                 if accuracy >= best_accuracy:
@@ -284,14 +289,14 @@ def train(config):
                             'model_state_dict': model.state_dict(),
                             'optimizer_state_dict': optimizer.state_dict(),
                             'accuracy': accuracy,
-                        }, os.path.join(config['save_dir'], config['best_dir'], f'best_model{fold}.pth'))
+                        }, os.path.join(config['model_dir'], config['best_dir'], f'best_model{fold}.pth'))
 
                         print(f"Saved best model with accuracy: {accuracy:.2f}, fold: {fold}")
             
         cpu_end = process.cpu_percent()
         cpu_usage = cpu_end - cpu_start
 
-
+        #calculate efficiency metrics 
         print("CPU Usage: ", cpu_usage)
         sum_lat = 0
         sum_thr = 0
@@ -309,7 +314,7 @@ def train(config):
                 sum_thr = 0
         
         
-        
+        #Plot latency and throughput for each fold 
         plt.figure(fig.number)
         cpu_results[fold] = cpu_usage
         if fold >= int(config['num_folds'] / 2):
@@ -333,7 +338,7 @@ def train(config):
 
     average_cpu = np.mean(cpu_results)
 
-    
+    #Create figure details
     fig.suptitle(f"Latency and Throughout: Parameters {learnable_params}")
     fig.supxlabel('Number of Epoch')
     plt.savefig(os.path.join(config['save_dir'], f'Latency and Throughput'))
@@ -358,14 +363,13 @@ def train(config):
 
 def evaluate(data_loader, model, fold_num, num_epoch):
     """
-    Evaluate the Siamese network
+    Evaluate the network
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        data_loader: validation data
+        model: the model being trained
+        fold_num: the number of the fold currently being run
+        num_epoch: the number of the epoch that is being run
     """
     # Set model to evaluation mode
 
@@ -382,6 +386,8 @@ def evaluate(data_loader, model, fold_num, num_epoch):
         
         val_pbar = tqdm(data_loader, desc=f"Fold {fold_num}")
         for data_samples in val_pbar:
+
+            #send data through the model for accuracy testing 
             data = data_samples["data_sample"].to(device)
             labels = data_samples["class_label"].to(device)
             
@@ -408,14 +414,10 @@ def evaluate(data_loader, model, fold_num, num_epoch):
 
 def test(model = None):
     """
-    Evaluate the Siamese network
+    Test the network on new data
     
     Args:
-        args: Command line arguments
-        split: Data split ('training' or 'testing')
-        data_loader: DataLoader for the split
-        siamese_net: Trained Siamese network
-        visualize: Whether to visualize predictions
+        model: the model to be tested if provided
     """
     # Set Model
 
@@ -476,11 +478,13 @@ def test(model = None):
     fig_prec, axes_prec = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')  
     fig_conf, axes_conf = plt.subplots(2, (int(config['num_folds'] / 2)), figsize=(15, 6), sharex = 'col')
     accuracy_results = np.zeros(config['num_folds'])
+
+    #iterate through each fold 
     for j in range(config['num_folds']):
 
         # test model for each fold on the test data
-        if os.path.exists(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth')):
-           checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth'))
+        if os.path.exists(os.path.join(config['model_dir'], config['best_dir'], f'best_model_transfer{j}.pth')):
+           checkpoint = torch.load(os.path.join(config['model_dir'], config['best_dir'], f'best_model_transfer{j}.pth'))
         else:
             continue
         
@@ -505,6 +509,8 @@ def test(model = None):
         with torch.no_grad():
             test_pbar = tqdm(test_dataloader, desc=f"Test")
             for data_samples in test_pbar:
+
+                #Send data through model and calculate accuracy
                 data_samples["data_sample"] = data_samples["data_sample"].to(device)
                 data_samples["class_label"] = data_samples["class_label"] .to(device)
 
@@ -554,6 +560,7 @@ def test(model = None):
 
         locations = ['TH', 'Ca', 'Con', 'B', 'L']
 
+        #plot precision and recall for each fold 
         if j >= int(config['num_folds'] / 2):
             axes_prec[1, j - (int(config['num_folds'] / 2))].plot(locations, precision_list, label = "Precision")
             axes_prec[1, j - (int(config['num_folds'] / 2))].plot(locations, recall_list, label = "Recall")
@@ -577,6 +584,8 @@ def test(model = None):
             sns.heatmap(cm_percent, annot=True, fmt=".1f", cmap="Blues", xticklabels=[0, 1, 2, 3, 4], yticklabels=[0, 1, 2, 3, 4], ax = axes_conf[0, j])
             axes_conf[0, j].set_title(f"Model {j}")  
     
+
+    #Add titles and save figures 
     plt.figure(fig_prec.number)
     fig_prec.supxlabel("Class Label")
     fig_prec.supylabel("Percentage")
@@ -584,7 +593,7 @@ def test(model = None):
     fig_prec.suptitle(f"Precision and Recall Curve for Each Class")
 
 
-    fig_prec.savefig(os.path.join(config['save_dir'], "Precision_Recall (K-Fold) Test"))
+    fig_prec.savefig(os.path.join(config['save_dir'], f"Precision_Recall (K-Fold) Test Final"))
    
     plt.close(fig_prec)
 
@@ -595,11 +604,11 @@ def test(model = None):
     plt.figure(fig_conf.number)
 
 
-    fig_conf.savefig(os.path.join(config['save_dir'], "Confusion_Matrix (K-Fold) Test"))
+    fig_conf.savefig(os.path.join(config['save_dir'], "Confusion_Matrix (K-Fold) Test Final"))
 
     plt.close(fig_conf)
     
-
+    print(np.mean(accuracy_results))
     
     return np.mean(accuracy_results)
 
@@ -610,9 +619,9 @@ if __name__ == "__main__":
     config = {
 
         
-
         'root_dir': "/content/drive/MyDrive/DeepLearningFallDetection/data",
-        'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2-AddActivation/DomainAdaptation/2d-4stack/",  # Directory specific to the model being tested
+        'model_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2-AddActivation/DomainAdaptation/2d-4stack/",
+        'save_dir': "/content/drive/MyDrive/DeepLearningFallDetection/CNN_Models/Personal_Model/Model2-AddActivation/DomainAdaptation/2d-4stack/FirstLayerFirstBlock2Layers",  # Directory specific to the model being tested
         
         
         # CNN Training parameters

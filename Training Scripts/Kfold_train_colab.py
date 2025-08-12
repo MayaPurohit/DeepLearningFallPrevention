@@ -1,5 +1,5 @@
 # Maya Purohit
-# Train.py
+# Kfold_train_colab.py
 # Used to train our models for each individual users with validation set (original)
 
 import os
@@ -282,6 +282,7 @@ def train(config):
                     (epoch + 1) % config['validation_interval'] == 0
                 ) or (epoch + 1 == config['num_epochs'])
                 
+                #save the model that has the highest validation accuracy
                 if should_validate:
                     accuracy = evaluate(val_dataloader, model, fold_num=fold, user_num=k, num_epoch=epoch)
                     if accuracy >= best_accuracy:
@@ -383,7 +384,7 @@ def evaluate(data_loader, model, fold_num, user_num, num_epoch):
         model: the model being trained
         fold_num: the number of the fold currently being run
         user_num: the number of the user that is being tested
-        num_epch: the number of the epoch that is being run
+        num_epoch: the number of the epoch that is being run
     """
     # Set model to evaluation mode
 
@@ -430,6 +431,7 @@ def test(user_ind, model = None):
     
     Args:
         user_ind: the number of the user that is being tested 
+        model: the model to be tested if it is provided
     """
     # Set Model
 
@@ -494,7 +496,7 @@ def test(user_ind, model = None):
     accuracy_results = np.zeros(config["num_folds"])
     for j in range(config['num_folds']):
 
-        #open model from file 
+        #load in models to be tested on new data
         if os.path.exists(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth')):
            checkpoint = torch.load(os.path.join(config['save_dir'], config['best_dir'], f'best_model{j}.pth'))
         else:
@@ -571,6 +573,7 @@ def test(user_ind, model = None):
 
         locations = ['TH', 'Ca', 'Con', 'B', 'L']
 
+        #plot precision and recall for all of the folds 
         if j >= int(config['num_folds'] / 2):
             axes_prec[1, j - (int(config['num_folds'] / 2))].plot(locations, precision_list, label = "Precision")
             axes_prec[1, j - (int(config['num_folds'] / 2))].plot(locations, recall_list, label = "Recall")
@@ -598,6 +601,7 @@ def test(user_ind, model = None):
     fig_prec.supxlabel("Class Label")
     fig_prec.supylabel("Percentage")
 
+    #add labels for all of the plots
     fig_prec.suptitle(f"Precision and Recall Curve for Each Class Attention: {config['include_attention']}")
     if config['test_type'] == "individual":
         fig_prec.savefig(os.path.join(config['save_dir'], f"Precision_Recall (K-Fold) User {config['user_num'][user_ind]}"))
